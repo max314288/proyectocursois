@@ -85,7 +85,7 @@ export default function PostresPage() {
                   className="text-lg font-bold"
                   style={{ color: 'var(--color-primary)' }}
                 >
-                  ${item.price.toLocaleString('es-CO')}
+                  S/{item.price.toLocaleString('es-PE')}
                 </span>
                 <button
                   onClick={() => handleAdd(item)}
