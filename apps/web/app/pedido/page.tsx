@@ -8,10 +8,18 @@ import {
   proteinas,
   toppingsItems,
   bebidas,
-  BOWL_BASE_PRICE,
   type BuilderItem,
 } from '@/lib/data'
 import { useCart } from '@/store/cartStore'
+import {
+  calcularPrecioBowl,
+  puedeAvanzarPaso,
+  toggleTopping as serviceToggleTopping,
+  seleccionACartItem,
+  obtenerSeleccionActual,
+  BOWL_SELECTION_INICIAL,
+  type BowlSelection,
+} from '@/lib/services/pedidoService'
 import { Check, ChevronRight, ShoppingBag } from 'lucide-react'
 
 const STEPS = [
@@ -21,68 +29,34 @@ const STEPS = [
   { label: 'Bebida', items: bebidas, multi: false },
 ]
 
-interface Selection {
-  base: BuilderItem | null
-  proteina: BuilderItem | null
-  toppings: BuilderItem[]
-  bebida: BuilderItem | null
-}
-
-function bowlTotal(sel: Selection) {
-  return (
-    BOWL_BASE_PRICE +
-    (sel.base?.price ?? 0) +
-    (sel.proteina?.price ?? 0) +
-    sel.toppings.reduce((s, t) => s + t.price, 0) +
-    (sel.bebida?.price ?? 0)
-  )
-}
-
 export default function PedidoPage() {
   const [step, setStep] = useState(0)
-  const [sel, setSel] = useState<Selection>({
-    base: null,
-    proteina: null,
-    toppings: [],
-    bebida: null,
-  })
+  // MODEL: estado del bowl, tipo importado del servicio (MVC + SOLID-I)
+  const [sel, setSel] = useState<BowlSelection>(BOWL_SELECTION_INICIAL)
   const [bowlAdded, setBowlAdded] = useState(false)
 
   const { add, count } = useCart()
   const cartCount = count()
 
+  // VIEW helper: actualiza un campo único de la selección (estado local de UI)
   function selectSingle(key: 'base' | 'proteina' | 'bebida', item: BuilderItem) {
     setSel((prev) => ({ ...prev, [key]: item }))
   }
 
-  function toggleTopping(item: BuilderItem) {
-    setSel((prev) => {
-      const has = prev.toppings.find((t) => t.id === item.id)
-      return {
-        ...prev,
-        toppings: has ? prev.toppings.filter((t) => t.id !== item.id) : [...prev.toppings, item],
-      }
-    })
+  // CONTROLLER delegado a pedidoService (MVC + SOLID-S)
+  function handleToggleTopping(item: BuilderItem) {
+    setSel((prev) => ({
+      ...prev,
+      toppings: serviceToggleTopping(prev.toppings, item),
+    }))
   }
 
-  function canProceed() {
-    if (step === 0) return !!sel.base
-    if (step === 1) return !!sel.proteina
-    if (step === 2) return true
-    if (step === 3) return !!sel.bebida
-    return false
-  }
-
+  // CONTROLLER delegado a pedidoService (MVC + SOLID-S)
   function addBowlToCart() {
-    if (!sel.base || !sel.proteina || !sel.bebida) return
-    add({
-      id: `bowl-${Date.now()}`,
-      name: `Bowl: ${sel.base.name} + ${sel.proteina.name}`,
-      price: bowlTotal(sel),
-      image: sel.proteina.image,
-      category: 'bowl',
-    })
-    setSel({ base: null, proteina: null, toppings: [], bebida: null })
+    const cartItem = seleccionACartItem(sel)
+    if (!cartItem) return
+    add(cartItem)
+    setSel(BOWL_SELECTION_INICIAL)
     setStep(0)
     setBowlAdded(true)
     setTimeout(() => setBowlAdded(false), 3000)
@@ -231,14 +205,8 @@ export default function PedidoPage() {
           }`}
         >
           {currentStep.items.map((item) => {
-            const isSelected =
-              step === 0
-                ? sel.base?.id === item.id
-                : step === 1
-                ? sel.proteina?.id === item.id
-                : step === 2
-                ? !!sel.toppings.find((t) => t.id === item.id)
-                : sel.bebida?.id === item.id
+            // CONTROLLER delegado a pedidoService (MVC + SOLID-S)
+            const isSelected = obtenerSeleccionActual(step, sel, item.id)
 
             return (
               <button
@@ -246,7 +214,7 @@ export default function PedidoPage() {
                 onClick={() => {
                   if (step === 0) selectSingle('base', item)
                   else if (step === 1) selectSingle('proteina', item)
-                  else if (step === 2) toggleTopping(item)
+                  else if (step === 2) handleToggleTopping(item)
                   else selectSingle('bebida', item)
                 }}
                 className="rounded-xl overflow-hidden text-left transition-all duration-200 focus:outline-none"
@@ -298,11 +266,11 @@ export default function PedidoPage() {
 
           {step < STEPS.length - 1 ? (
             <button
-              onClick={() => canProceed() && setStep(step + 1)}
-              disabled={!canProceed()}
+              onClick={() => puedeAvanzarPaso(step, sel) && setStep(step + 1)}
+              disabled={!puedeAvanzarPaso(step, sel)}
               className="flex items-center gap-2 text-sm font-semibold px-6 py-2 rounded-full transition-all"
               style={
-                canProceed()
+                puedeAvanzarPaso(step, sel)
                   ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }
                   : { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }
               }
@@ -312,10 +280,10 @@ export default function PedidoPage() {
           ) : (
             <button
               onClick={addBowlToCart}
-              disabled={!canProceed()}
+              disabled={!puedeAvanzarPaso(step, sel)}
               className="flex items-center gap-2 text-sm font-semibold px-6 py-2 rounded-full transition-all"
               style={
-                canProceed()
+                puedeAvanzarPaso(step, sel)
                   ? { backgroundColor: 'var(--color-secondary)', color: 'var(--color-on-secondary)' }
                   : { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }
               }
@@ -371,7 +339,7 @@ export default function PedidoPage() {
             )}
           </div>
           <p className="mt-3 font-bold" style={{ color: 'var(--color-primary)' }}>
-            Precio bowl: S/{bowlTotal(sel).toLocaleString('es-PE')}
+            Precio bowl: S/{calcularPrecioBowl(sel).toLocaleString('es-PE')}
           </p>
         </div>
       )}

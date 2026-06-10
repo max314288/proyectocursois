@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { menus } from '@/lib/data'
 import { useCart } from '@/store/cartStore'
+import { filtrarMenus, esMenuDestacado } from '@/lib/services/menuService'
 import { ShoppingBag, Check } from 'lucide-react'
 
 const FILTERS = ['Todos', 'Campesino', 'Verde', 'Express', 'Mar', 'Ejecutivo']
@@ -13,10 +14,8 @@ export default function MenusPage() {
   const [added, setAdded] = useState<string | null>(null)
   const [filter, setFilter] = useState('Todos')
 
-  const filtered =
-    filter === 'Todos'
-      ? menus
-      : menus.filter((m) => m.name.includes(filter))
+  // CONTROLLER delegado a menuService (MVC + SOLID-S)
+  const filtered = filtrarMenus(menus, filter)
 
   function handleAdd(menu: (typeof menus)[0]) {
     add({ id: menu.id, name: menu.name, price: menu.price, image: menu.image, category: 'menu' })
@@ -82,7 +81,8 @@ export default function MenusPage() {
       {/* Bento grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map((menu, i) => {
-          const isFeatured = i === 0 && filter === 'Todos'
+          // CONTROLLER delegado a menuService (MVC + SOLID-S)
+          const isFeatured = esMenuDestacado(i, filter)
           return (
             <article
               key={menu.id}

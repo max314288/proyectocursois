@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary:       #823b18;
+  --color-secondary:     #54651e;
+  --color-surface:       #0f0f0f;
+  --color-surface-card:  #1a1a1a;
+  --color-surface-alt:   #252525;
+  --color-on-surface:    #f0ece8;
+  --color-muted:         #888;
+  --color-border:        #2e2e2e;
+  --color-pending:       #d97706;
+  --color-progress:      #2563eb;
+  --color-done:          #16a34a;
+
+  --font-work-sans: "Work Sans", sans-serif;
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700;800&display=swap");
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  font-family: var(--font-work-sans);
+}

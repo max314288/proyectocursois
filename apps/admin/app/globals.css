@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary:        #823b18;
+  --color-primary-light:  #a84d22;
+  --color-secondary:      #54651e;
+  --color-surface:        #fff8f5;
+  --color-surface-alt:    #f5ede6;
+  --color-on-surface:     #1a1008;
+  --color-muted:          #7a6558;
+  --color-border:         #e8d8cc;
+
+  --font-work-sans: "Work Sans", sans-serif;
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&display=swap");
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  font-family: var(--font-work-sans);
+}

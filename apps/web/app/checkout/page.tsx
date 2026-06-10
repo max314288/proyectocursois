@@ -7,6 +7,16 @@ import Link from 'next/link'
 import { useCart } from '@/store/cartStore'
 import { useOrderStore, type ConsumptionMode, type PaymentMethod } from '@/store/orderStore'
 import {
+  generarOrderId,
+  formatearNumeroTarjeta,
+  formatearExpiry,
+  esPresencialDisponible,
+  tarjetaCompleta,
+  construirQRPayload,
+  requiereQR,
+  QR_CONFIG,
+} from '@/lib/services/checkoutService'
+import {
   Check,
   ChevronRight,
   Building2,
@@ -24,22 +34,6 @@ type Step = 'mode' | 'payment' | 'card' | 'done'
 
 const STEP_LABELS = ['Modalidad', 'Pago', 'Confirmación']
 const stepIndex: Record<Step, number> = { mode: 0, payment: 1, card: 1, done: 2 }
-
-/* ─── helpers ─── */
-function fmtCard(v: string) {
-  return v
-    .replace(/\D/g, '')
-    .slice(0, 16)
-    .replace(/(.{4})/g, '$1 ')
-    .trim()
-}
-function fmtExpiry(v: string) {
-  const d = v.replace(/\D/g, '').slice(0, 4)
-  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d
-}
-function genOrderId() {
-  return `CAP-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
-}
 
 /* ─── Component ─── */
 export default function CheckoutPage() {
@@ -69,7 +63,8 @@ export default function CheckoutPage() {
 
   /* ── confirm: handle presencial (salon) ── */
   function handlePresencial() {
-    const id = genOrderId()
+    // CONTROLLER delegado a checkoutService (MVC + SOLID-S)
+    const id = generarOrderId()
     setOrderId(id)
     const order = {
       id,
@@ -91,31 +86,24 @@ export default function CheckoutPage() {
     // Simulate gateway processing
     await new Promise((r) => setTimeout(r, 2200))
 
-    const id = genOrderId()
+    // CONTROLLER delegado a checkoutService (MVC + SOLID-S)
+    const id = generarOrderId()
     setOrderId(id)
 
     let qrUrl = ''
 
-    // QR only for Takeaway
-    if (mode === 'takeaway') {
+    // QR solo para Takeaway — lógica delegada al servicio
+    if (requiereQR(mode!, 'gateway')) {
       try {
         const QRCode = await import('qrcode')
-        const payload = JSON.stringify({
-          pedido: id,
-          items: items.length,
-          total: total(),
-          modo: 'takeaway',
-          expira: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        })
-        qrUrl = await QRCode.toDataURL(payload, {
-          width: 280,
-          margin: 2,
-          color: { dark: '#1e1b18', light: '#fff8f5' },
-          errorCorrectionLevel: 'M',
-        })
+        // Payload y configuración del QR centralizados en checkoutService
+        qrUrl = await QRCode.toDataURL(
+          construirQRPayload(id, items.length, total()),
+          QR_CONFIG
+        )
         setQrDataUrl(qrUrl)
       } catch {
-        // fallback: no QR
+        // fallback: sin QR
       }
     }
 
@@ -431,7 +419,7 @@ export default function CheckoutPage() {
                 </p>
 
                 <div className="flex flex-col gap-4">
-                  {/* Pasarela web */}
+                  {/* Pasarela web — siempre disponible */}
                   <button
                     onClick={() => {
                       setPayment('gateway')
@@ -483,8 +471,8 @@ export default function CheckoutPage() {
                     </div>
                   </button>
 
-                  {/* Pago presencial */}
-                  {mode === 'salon' ? (
+                  {/* Pago presencial — disponibilidad delegada a checkoutService */}
+                  {esPresencialDisponible(mode!) ? (
                     <button
                       onClick={() => {
                         setPayment('presencial')
@@ -659,7 +647,7 @@ export default function CheckoutPage() {
                       inputMode="numeric"
                       placeholder="1234 5678 9012 3456"
                       value={cardNum}
-                      onChange={(e) => setCardNum(fmtCard(e.target.value))}
+                      onChange={(e) => setCardNum(formatearNumeroTarjeta(e.target.value))}
                       className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono tracking-wider"
                       style={{
                         backgroundColor: 'var(--color-surface-container-low)',
@@ -709,7 +697,7 @@ export default function CheckoutPage() {
                         inputMode="numeric"
                         placeholder="MM/AA"
                         value={expiry}
-                        onChange={(e) => setExpiry(fmtExpiry(e.target.value))}
+                        onChange={(e) => setExpiry(formatearExpiry(e.target.value))}
                         className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono"
                         style={{
                           backgroundColor: 'var(--color-surface-container-low)',
@@ -749,10 +737,11 @@ export default function CheckoutPage() {
                   {/* Pay button */}
                   <button
                     onClick={handleWebPayment}
-                    disabled={processing || cardNum.length < 19 || !cardName || expiry.length < 5 || cvv.length < 3}
+                    // Validación delegada a checkoutService (MVC + SOLID-S)
+                    disabled={processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)}
                     className="w-full py-3.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 mt-2 transition-opacity"
                     style={
-                      processing || cardNum.length < 19 || !cardName || expiry.length < 5 || cvv.length < 3
+                      processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)
                         ? {
                             backgroundColor: 'var(--color-surface-container-high)',
                             color: 'var(--color-on-surface-variant)',
@@ -835,8 +824,8 @@ export default function CheckoutPage() {
                   Pedido # {orderId}
                 </div>
 
-                {/* QR Code — solo para Takeaway + web */}
-                {mode === 'takeaway' && payment === 'gateway' && qrDataUrl && (
+                {/* QR Code — condición delegada a checkoutService */}
+                {requiereQR(mode!, payment!) && qrDataUrl && (
                   <div className="mb-8">
                     <div
                       className="inline-block p-4 rounded-2xl shadow-ambient"

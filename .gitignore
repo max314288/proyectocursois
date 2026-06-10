@@ -11,5 +11,4 @@ claude-logs
 claude-uploads
 .claude/
 claude
-/CLAUDE.*
 claude.md

@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useCart } from '@/store/cartStore'
+import { calcularSubtotalItem } from '@/lib/services/cartService'
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react'
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -122,7 +123,7 @@ export default function CarritoPage() {
                   className="text-sm font-bold mt-1"
                   style={{ color: 'var(--color-primary)' }}
                 >
-                  S/{(item.price * item.quantity).toLocaleString('es-PE')}
+                  S/{calcularSubtotalItem(item.price, item.quantity).toLocaleString('es-PE')}
                 </p>
               </div>
 
@@ -211,7 +212,7 @@ export default function CarritoPage() {
                   {item.name} ×{item.quantity}
                 </span>
                 <span className="font-medium">
-                  S/{(item.price * item.quantity).toLocaleString('es-PE')}
+                  S/{calcularSubtotalItem(item.price, item.quantity).toLocaleString('es-PE')}
                 </span>
               </div>
             ))}
