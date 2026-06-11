@@ -1,0 +1,45 @@
+### Maven ###
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+### IDE: IntelliJ IDEA ###
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+### IDE: Eclipse ###
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+bin/
+
+### IDE: VSCode ###
+.vscode/
+
+### Spring Boot ###
+HELP.md
+!.mvn/wrapper/maven-wrapper.properties
+
+### System ###
+.DS_Store
+Thumbs.db
+
+### Logs ###
+*.log
+logs/
+
+### Local config (NUNCA commitear secretos reales) ###
+application-local.properties
+application-secret.properties
