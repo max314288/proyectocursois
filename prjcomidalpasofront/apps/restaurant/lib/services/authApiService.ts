@@ -31,8 +31,29 @@ export async function loginApi(email: string, password: string): Promise<LoginRe
   return res.json() as Promise<LoginResponse>
 }
 
+export async function registerApi(data: {
+  nombre: string
+  apellido: string
+  email: string
+  password: string
+  rol: 'restaurante'
+}): Promise<LoginResponse> {
+  const res = await fetch(`${API}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? 'REGISTER_FAILED')
+  }
+
+  return res.json() as Promise<LoginResponse>
+}
+
 export async function fetchMe(token: string): Promise<UsuarioDTO> {
-  const res = await fetch(`${API}/me`, {
+  const res = await fetch(`${API}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   })
 

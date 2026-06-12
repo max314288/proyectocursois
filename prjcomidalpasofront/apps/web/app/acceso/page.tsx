@@ -40,7 +40,7 @@ export default function AccesoPage() {
     const ok = await validarCredenciales(loginEmail, loginPassword)
     setLoginLoading(false)
     if (ok) {
-      router.replace('/')
+      router.replace('/restaurantes')
     } else {
       setLoginError(getMensajeErrorCredenciales())
     }
@@ -58,7 +58,7 @@ export default function AccesoPage() {
     })
     setRegLoading(false)
     if (ok) {
-      router.replace('/')
+      router.replace('/restaurantes')
     } else {
       setRegError(getMensajeErrorRegistro())
     }
@@ -325,7 +325,7 @@ export default function AccesoPage() {
                     onChange={(e) => { setRegPassword(e.target.value); setRegError('') }}
                     placeholder="••••••••"
                     required
-                    minLength={6}
+                    minLength={8}
                     disabled={regLoading}
                     className="w-full px-4 py-3 pr-11 rounded-xl text-sm outline-none transition-all"
                     style={{

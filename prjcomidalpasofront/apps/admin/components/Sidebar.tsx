@@ -8,6 +8,7 @@ import {
   BookOpen,
   ShoppingBag,
   Settings,
+  User,
   LogOut,
 } from "lucide-react";
 import { cerrarSesion } from "@/lib/services/authService";
@@ -20,6 +21,7 @@ const ICON_MAP = {
   BookOpen,
   ShoppingBag,
   Settings,
+  User,
 } as const
 
 type IconName = keyof typeof ICON_MAP

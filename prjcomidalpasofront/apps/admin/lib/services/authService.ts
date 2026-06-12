@@ -1,5 +1,5 @@
 import { jwtDecode } from 'jwt-decode'
-import { loginApi, type UsuarioDTO } from './authApiService'
+import { loginApi, registerApi, type UsuarioDTO } from './authApiService'
 
 const STORAGE_KEY = 'admin_auth' as const
 
@@ -21,8 +21,28 @@ export async function validarCredenciales(email: string, password: string): Prom
   }
 }
 
+export async function registrar(data: {
+  nombre: string
+  apellido: string
+  email: string
+  password: string
+}): Promise<boolean> {
+  try {
+    const { token, usuario } = await registerApi({ ...data, rol: 'admin' })
+    if (usuario.rol !== 'admin') return false
+    guardarSesion(token, usuario)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function getMensajeErrorCredenciales(): string {
   return 'Credenciales incorrectas. Verifica tu email y contraseña.'
+}
+
+export function getMensajeErrorRegistro(): string {
+  return 'No se pudo crear la cuenta. El correo ya podría estar registrado.'
 }
 
 // ─── Gestión de sesión ────────────────────────────────────────────────────────
@@ -61,4 +81,20 @@ export function getUsuario(): UsuarioDTO | null {
   } catch {
     return null
   }
+}
+
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem(STORAGE_KEY)
+  if (!raw) return null
+  try {
+    return (JSON.parse(raw) as SessionData).token
+  } catch {
+    return null
+  }
+}
+
+export function actualizarUsuarioSesion(usuario: UsuarioDTO): void {
+  const token = getToken()
+  if (token) guardarSesion(token, usuario)
 }

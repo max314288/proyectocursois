@@ -70,9 +70,20 @@ public class EtiquetaDAOImpl implements EtiquetaDAO {
         return rows.stream().map(this::mapRow).toList();
     }
 
+    // ─── sp_listar_etiquetas ──────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Etiqueta> listarTodas() {
+        StoredProcedureQuery q = em.createStoredProcedureQuery("sp_listar_etiquetas");
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = q.getResultList();
+        return rows.stream().map(this::mapRow).toList();
+    }
+
     // ─── helpers ───────────────────────────────────────────────────────────────
 
-    /** sp_etiquetas_de_item: codigo, nombre, color */
+    /** sp_etiquetas_de_item / sp_listar_etiquetas: codigo, nombre, color */
     private Etiqueta mapRow(Object[] row) {
         Etiqueta e = new Etiqueta();
         int i = 0;

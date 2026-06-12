@@ -3,11 +3,14 @@ package com.comidaalpaso.api.resource.restaurante;
 import com.comidaalpaso.api.business.restaurante.RestauranteService;
 import com.comidaalpaso.api.resource.restaurante.model.CreateRestauranteRequest;
 import com.comidaalpaso.api.resource.restaurante.model.RestauranteDTO;
+import com.comidaalpaso.api.resource.restaurante.model.ElegirRestauranteDTO;
 import com.comidaalpaso.api.resource.restaurante.model.ToggleRestauranteRequest;
 import com.comidaalpaso.api.resource.restaurante.model.UpdateRestauranteRequest;
+import com.comidaalpaso.api.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,8 +45,15 @@ public class RestauranteResource {
     @GetMapping
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<RestauranteDTO>> listar(
-            @RequestParam(defaultValue = "false") boolean soloActivos) {
-        return ResponseEntity.ok(restauranteService.listar(soloActivos));
+            @RequestParam(defaultValue = "false") boolean soloActivos,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(restauranteService.listar(soloActivos, principal.getId()));
+    }
+
+    @GetMapping("/{id}/elegir")
+    @PreAuthorize("hasRole('CLIENTE')")
+    public ResponseEntity<ElegirRestauranteDTO> elegir(@PathVariable UUID id) {
+        return ResponseEntity.ok(restauranteService.elegir(id));
     }
 
     @PutMapping("/{id}")

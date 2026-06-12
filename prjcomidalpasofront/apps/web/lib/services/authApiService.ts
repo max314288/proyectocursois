@@ -52,7 +52,7 @@ export async function registerApi(data: {
 }
 
 export async function fetchMe(token: string): Promise<UsuarioDTO> {
-  const res = await fetch(`${API}/me`, {
+  const res = await fetch(`${API}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   })
 

@@ -81,3 +81,19 @@ export function getUsuario(): UsuarioDTO | null {
     return null
   }
 }
+
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem(STORAGE_KEY)
+  if (!raw) return null
+  try {
+    return (JSON.parse(raw) as SessionData).token
+  } catch {
+    return null
+  }
+}
+
+export function actualizarUsuarioSesion(usuario: UsuarioDTO): void {
+  const token = getToken()
+  if (token) guardarSesion(token, usuario)
+}

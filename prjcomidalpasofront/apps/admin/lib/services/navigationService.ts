@@ -29,6 +29,7 @@ export const SIDEBAR_LINKS: SidebarLink[] = [
   { href: '/menus',         label: 'Menús',        iconName: 'BookOpen'         },
   { href: '/pedidos',       label: 'Pedidos',      iconName: 'ShoppingBag'      },
   { href: '/configuracion', label: 'Configuración',iconName: 'Settings'         },
+  { href: '/perfil',        label: 'Mi Perfil',    iconName: 'User'             },
 ]
 
 // ─── Lógica de navegación ─────────────────────────────────────────────────────

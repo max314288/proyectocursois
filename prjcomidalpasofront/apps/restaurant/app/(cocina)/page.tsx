@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock, ChefHat, CheckCircle, LogOut } from "lucide-react";
+import { Clock, ChefHat, CheckCircle, LogOut, User } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cerrarSesion } from "@/lib/services/authService";
 import { KANBAN_COLUMNS, getBadgeColor } from "@/lib/services/kitchenService";
@@ -37,6 +38,14 @@ export default function KitchenPage() {
             <span className="h-2 w-2 rounded-full bg-[var(--color-done)] inline-block" />
             En línea
           </div>
+          <Link
+            href="/perfil"
+            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--color-surface-alt)]"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            <User size={15} />
+            Mi Perfil
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--color-surface-alt)]"

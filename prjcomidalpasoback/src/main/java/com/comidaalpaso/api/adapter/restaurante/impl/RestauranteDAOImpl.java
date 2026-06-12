@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -109,14 +110,43 @@ public class RestauranteDAOImpl implements RestauranteDAO {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Restaurante> listar(boolean soloActivos) {
-        StoredProcedureQuery q = em.createStoredProcedureQuery("sp_listar_restaurantes")
-            .registerStoredProcedureParameter("solo_activos", Short.class, ParameterMode.IN)
-            .setParameter("solo_activos", (short) (soloActivos ? 1 : 0));
-
+    public List<Restaurante> listar(boolean soloActivos, UUID usuarioId) {
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = q.getResultList();
+        List<Object[]> rows = em.createNativeQuery("{call sp_listar_restaurantes(?, ?)}")
+            .setParameter(1, (short) (soloActivos ? 1 : 0))
+            .setParameter(2, usuarioId.toString())
+            .getResultList();
         return rows.stream().map(this::mapRow).toList();
+    }
+
+    // ─── findById ──────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Restaurante> findById(UUID id) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = (List<Object[]>) em.createNativeQuery(
+                "SELECT CAST(id AS VARCHAR(36)), nombre, direccion, telefono, " +
+                "acepta_recojo, acepta_delivery, acepta_salon, activo " +
+                "FROM restaurantes WHERE id = CAST(? AS UNIQUEIDENTIFIER)")
+            .setParameter(1, id.toString())
+            .getResultList();
+        if (rows.isEmpty()) return Optional.empty();
+        return Optional.of(mapRow(rows.get(0)));
+    }
+
+    // ─── findRestauranteIdByUsuarioId ──────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findRestauranteIdByUsuarioId(UUID usuarioId) {
+        @SuppressWarnings("unchecked")
+        List<Object> result = em.createNativeQuery(
+                "SELECT CAST(id AS VARCHAR(36)) FROM restaurantes WHERE usuario_id = CAST(:uid AS UNIQUEIDENTIFIER) AND activo = 1")
+            .setParameter("uid", usuarioId.toString())
+            .getResultList();
+        if (result.isEmpty()) return Optional.empty();
+        return Optional.of(UUID.fromString(result.get(0).toString()));
     }
 
     // ─── helpers ───────────────────────────────────────────────────────────────

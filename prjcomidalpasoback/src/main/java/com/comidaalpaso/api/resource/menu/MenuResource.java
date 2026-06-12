@@ -10,9 +10,11 @@ import com.comidaalpaso.api.resource.menu.model.ItemMenuDTO;
 import com.comidaalpaso.api.resource.menu.model.OpcionArmaPlatoDTO;
 import com.comidaalpaso.api.resource.menu.model.ToggleItemMenuRequest;
 import com.comidaalpaso.api.resource.menu.model.UpdateItemMenuRequest;
+import com.comidaalpaso.api.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -60,8 +62,10 @@ public class MenuResource {
 
     @PostMapping("/items")
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
-    public ResponseEntity<Map<String, UUID>> crearItem(@Valid @RequestBody CreateItemMenuRequest req) {
-        UUID id = menuService.crearItem(req);
+    public ResponseEntity<Map<String, UUID>> crearItem(
+            @Valid @RequestBody CreateItemMenuRequest req,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        UUID id = menuService.crearItem(req, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("id", id));
     }
 
@@ -69,8 +73,9 @@ public class MenuResource {
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, Boolean>> actualizarItem(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateItemMenuRequest req) {
-        menuService.actualizarItem(id, req);
+            @Valid @RequestBody UpdateItemMenuRequest req,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        menuService.actualizarItem(id, req, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -78,15 +83,18 @@ public class MenuResource {
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, Boolean>> toggleItem(
             @PathVariable UUID id,
-            @Valid @RequestBody ToggleItemMenuRequest req) {
-        menuService.toggleItem(id, req.getDisponible());
+            @Valid @RequestBody ToggleItemMenuRequest req,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        menuService.toggleItem(id, req.getDisponible(), principal.getId(), principal.getRol());
         return ResponseEntity.accepted().body(Map.of("ok", true));
     }
 
     @DeleteMapping("/items/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
-    public ResponseEntity<Map<String, Boolean>> eliminarItem(@PathVariable UUID id) {
-        menuService.eliminarItem(id);
+    public ResponseEntity<Map<String, Boolean>> eliminarItem(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        menuService.eliminarItem(id, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -102,8 +110,9 @@ public class MenuResource {
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, UUID>> agregarComponente(
             @PathVariable UUID menuId,
-            @Valid @RequestBody AgregarComponenteMenuRequest req) {
-        UUID id = menuService.agregarComponenteMenu(menuId, req);
+            @Valid @RequestBody AgregarComponenteMenuRequest req,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        UUID id = menuService.agregarComponenteMenu(menuId, req, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("id", id));
     }
 
@@ -111,8 +120,9 @@ public class MenuResource {
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, Boolean>> quitarComponente(
             @PathVariable UUID menuId,
-            @PathVariable UUID itemId) {
-        menuService.quitarComponenteMenu(menuId, itemId);
+            @PathVariable UUID itemId,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        menuService.quitarComponenteMenu(menuId, itemId, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -128,8 +138,9 @@ public class MenuResource {
     @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, UUID>> agregarOpcion(
             @PathVariable UUID armaPlatoId,
-            @Valid @RequestBody AgregarComponenteArmaPlatoRequest req) {
-        UUID id = menuService.agregarComponenteArmaPlato(armaPlatoId, req);
+            @Valid @RequestBody AgregarComponenteArmaPlatoRequest req,
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        UUID id = menuService.agregarComponenteArmaPlato(armaPlatoId, req, principal.getId(), principal.getRol());
         return ResponseEntity.ok(Map.of("id", id));
     }
 }

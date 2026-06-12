@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -270,6 +271,20 @@ public class MenuDAOImpl implements MenuDAO {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = q.getResultList();
         return rows.stream().map(this::mapItemListado).toList();
+    }
+
+    // ─── findRestauranteIdByItemId ─────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findRestauranteIdByItemId(UUID itemId) {
+        @SuppressWarnings("unchecked")
+        List<Object> result = em.createNativeQuery(
+                "SELECT CAST(restaurante_id AS VARCHAR(36)) FROM items_menu WHERE id = CAST(:id AS UNIQUEIDENTIFIER)")
+            .setParameter("id", itemId.toString())
+            .getResultList();
+        if (result.isEmpty()) return Optional.empty();
+        return Optional.of(UUID.fromString(result.get(0).toString()));
     }
 
     // ─── row mappers ───────────────────────────────────────────────────────────

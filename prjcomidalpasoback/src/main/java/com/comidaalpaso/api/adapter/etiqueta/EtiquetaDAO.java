@@ -9,4 +9,5 @@ public interface EtiquetaDAO {
     void asignar(UUID itemId, String etiquetaCodigo);
     void quitar(UUID itemId, String etiquetaCodigo);
     List<Etiqueta> etiquetasDeItem(UUID itemId);
+    List<Etiqueta> listarTodas();
 }

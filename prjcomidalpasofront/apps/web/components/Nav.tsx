@@ -3,16 +3,17 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCart } from '@/store/cartStore'
+import { estaAutenticado } from '@/lib/services/authService'
 import { ShoppingBag, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-const links = [
+const baseLinks = [
   { href: '/', label: 'Inicio' },
+  { href: '/restaurantes', label: 'Restaurantes' },
   { href: '/menus', label: 'Menús' },
   { href: '/carta', label: 'A la Carta' },
   { href: '/postres', label: 'Postres' },
   { href: '/pedido', label: 'Arma tu Pedido' },
-  { href: '/acceso', label: 'Acceso' },
   { href: '/contacto', label: 'Contacto' },
 ]
 
@@ -20,6 +21,18 @@ export default function Nav() {
   const pathname = usePathname()
   const count = useCart((s) => s.count())
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  // gate `mounted` evita hydration mismatch al leer localStorage
+  const autenticado = mounted && estaAutenticado()
+  const links = [
+    ...baseLinks,
+    autenticado
+      ? { href: '/perfil', label: 'Mi Perfil' }
+      : { href: '/acceso', label: 'Acceso' },
+  ]
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-outline-variant">

@@ -7,6 +7,7 @@ import com.comidaalpaso.api.adapter.menu.model.OpcionArmaPlatoRow;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MenuDAO {
@@ -36,4 +37,6 @@ public interface MenuDAO {
     // Listado completo con filtros
     List<ItemListadoRow> listarItems(UUID restauranteId, String categoriaCodigo,
                                      String etiquetaCodigo, boolean soloDisponibles);
+
+    Optional<UUID> findRestauranteIdByItemId(UUID itemId);
 }
