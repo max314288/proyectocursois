@@ -11,6 +11,12 @@
   --color-border:         #e8d8cc;
 
   --font-work-sans: "Work Sans", sans-serif;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast:  120ms;
+  --duration-base:  180ms;
+  --duration-modal: 200ms;
 }
 
 @import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&display=swap");
@@ -22,3 +28,68 @@ body {
   color: var(--color-on-surface);
   font-family: var(--font-work-sans);
 }
+
+/* ── Micro-interacciones: botones ── */
+@utility btn-interactive {
+  @apply transition-all duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]
+    hover:brightness-105 active:scale-[0.97] active:brightness-95
+    focus-visible:outline-none focus-visible:ring-2
+    focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2
+    focus-visible:ring-offset-[var(--color-surface)]
+    disabled:hover:brightness-100 disabled:active:scale-100;
+}
+
+@utility btn-icon-interactive {
+  @apply transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] rounded-lg
+    hover:bg-[var(--color-on-surface)]/8 active:scale-90
+    focus-visible:outline-none focus-visible:ring-2
+    focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1
+    focus-visible:ring-offset-[var(--color-surface)];
+}
+
+@utility btn-toggle-interactive {
+  @apply transition-all duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]
+    hover:brightness-95 active:scale-[0.96]
+    focus-visible:outline-none focus-visible:ring-2
+    focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1
+    focus-visible:ring-offset-[var(--color-surface)];
+}
+
+/* ── Tooltip CSS-only ── */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  white-space: nowrap;
+  background: var(--color-on-surface);
+  color: var(--color-surface);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
+  z-index: 40;
+}
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Modal enter motion ── */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-overlay-in { animation: overlay-in var(--duration-base) var(--ease-standard) both; }
+.animate-panel-in   { animation: panel-in var(--duration-modal) var(--ease-standard) both; }

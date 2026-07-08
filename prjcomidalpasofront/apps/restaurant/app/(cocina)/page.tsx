@@ -179,7 +179,7 @@ export default function KitchenPage() {
                             e.stopPropagation()
                             avanzarEstado(p, id)
                           }}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full btn-interactive"
                           style={{ backgroundColor: colorVar, color: 'white' }}
                         >
                           {id === 'pending' ? 'Preparar' : id === 'progress' ? 'Listo' : 'Entregar'}
@@ -196,11 +196,11 @@ export default function KitchenPage() {
 
       {/* ── Modal detalle ── */}
       {seleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSeleccionado(null)}>
-          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl p-6 bg-[var(--color-surface-card)]" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-overlay-in" onClick={() => setSeleccionado(null)}>
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl p-6 bg-[var(--color-surface-card)] animate-panel-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
               <h2 className="text-lg font-bold">Pedido #{seleccionado.slice(0, 8).toUpperCase()}</h2>
-              <button onClick={() => setSeleccionado(null)} className="p-1 text-[var(--color-muted)] hover:opacity-70">
+              <button onClick={() => setSeleccionado(null)} className="p-1 text-[var(--color-muted)] btn-icon-interactive" data-tooltip="Cerrar" aria-label="Cerrar">
                 <X size={18} />
               </button>
             </div>
@@ -249,7 +249,7 @@ export default function KitchenPage() {
                       <button
                         onClick={handleConfirmarPago}
                         disabled={confirmando}
-                        className="mt-2 text-xs font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50"
+                        className="mt-2 text-xs font-semibold px-4 py-2 rounded-full text-white btn-interactive disabled:opacity-50"
                         style={{ backgroundColor: 'var(--color-done)' }}
                       >
                         {confirmando ? 'Confirmando…' : 'Confirmar pago recibido'}

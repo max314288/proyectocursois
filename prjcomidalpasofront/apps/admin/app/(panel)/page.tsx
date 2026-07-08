@@ -7,9 +7,11 @@ import { listarPedidosRestaurante, cargarCatalogo } from '@/lib/services/adminAp
 import type { PedidoResumenDTO, ElegirResponse } from '@/lib/services/types'
 
 function esHoy(iso: string): boolean {
-  const d = new Date(iso)
+  // createdAt llega como "YYYY-MM-DD" (LocalDate, sin hora). `new Date(iso)` lo
+  // interpretaría como medianoche UTC y desfasaría un día en timezones negativos (Perú UTC-5).
+  const [y, m, d] = iso.split('-').map(Number)
   const hoy = new Date()
-  return d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate()
+  return y === hoy.getFullYear() && m === hoy.getMonth() + 1 && d === hoy.getDate()
 }
 
 export default function DashboardPage() {

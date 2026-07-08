@@ -117,7 +117,7 @@ export default function MenusPage() {
             return (
               <article
                 key={item.id}
-                className={`rounded-2xl overflow-hidden shadow-ambient group flex flex-col ${
+                className={`rounded-2xl overflow-hidden shadow-ambient group flex flex-col transition-transform duration-200 hover:-translate-y-1 ${
                   isFeatured ? 'md:col-span-2 md:flex-row' : ''
                 } ${!item.disponible ? 'opacity-60' : ''}`}
                 style={{ backgroundColor: 'var(--color-surface)' }}

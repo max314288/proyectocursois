@@ -160,7 +160,7 @@ export default function InicioPage() {
               <Link
                 key={cat.href}
                 href={cat.href}
-                className="group relative rounded-2xl overflow-hidden shadow-ambient"
+                className="group relative rounded-2xl overflow-hidden shadow-ambient transition-transform duration-200 hover:-translate-y-1"
                 style={{ aspectRatio: '3/4' }}
               >
                 <Image
@@ -258,7 +258,7 @@ export default function InicioPage() {
                 {featured.map((item, i) => (
                   <article
                     key={item.id}
-                    className={`rounded-2xl overflow-hidden shadow-ambient group flex flex-col ${
+                    className={`rounded-2xl overflow-hidden shadow-ambient group flex flex-col transition-transform duration-200 hover:-translate-y-1 ${
                       i === 0 ? 'md:col-span-2 md:row-span-1' : ''
                     }`}
                     style={{ backgroundColor: 'var(--color-surface)' }}

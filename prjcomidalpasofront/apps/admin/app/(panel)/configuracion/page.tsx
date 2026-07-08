@@ -118,7 +118,7 @@ export default function ConfiguracionPage() {
           <h1 className="text-3xl font-bold text-[var(--color-on-surface)]">Configuración</h1>
           <p className="text-[var(--color-muted)] mt-1">Datos del restaurante y mesas</p>
         </div>
-        <button onClick={abrirAlta} className="flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white">
+        <button onClick={abrirAlta} className="flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white btn-interactive">
           <Plus size={16} /> Nuevo restaurante
         </button>
       </div>
@@ -132,7 +132,7 @@ export default function ConfiguracionPage() {
               <h2 className="font-semibold text-[var(--color-on-surface)]">Datos del restaurante</h2>
               <button
                 onClick={handleToggleActivo}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${actual.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                className={`text-[11px] font-semibold px-2.5 py-1 rounded-full btn-toggle-interactive ${actual.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
               >
                 {actual.activo ? 'Activo' : 'Inactivo'}
               </button>
@@ -178,7 +178,7 @@ export default function ConfiguracionPage() {
                 Salón
               </label>
             </div>
-            <button onClick={guardarDatos} disabled={guardando} className="px-6 py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold disabled:opacity-50">
+            <button onClick={guardarDatos} disabled={guardando} className="px-6 py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive disabled:opacity-50">
               {guardando ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
@@ -189,7 +189,7 @@ export default function ConfiguracionPage() {
               {mesas.map((m) => (
                 <div key={m.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-surface-alt)] text-sm">
                   Mesa {m.numero} · {m.capacidad}p
-                  <button onClick={() => handleEliminarMesa(m.id)} className="text-red-600">
+                  <button onClick={() => handleEliminarMesa(m.id)} className="text-red-600 btn-icon-interactive hover:bg-red-500/10" data-tooltip="Eliminar mesa" aria-label="Eliminar mesa">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -210,7 +210,7 @@ export default function ConfiguracionPage() {
                 onChange={(e) => setNuevaMesa({ ...nuevaMesa, capacidad: e.target.value })}
                 className="w-28 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm"
               />
-              <button onClick={handleAgregarMesa} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold">
+              <button onClick={handleAgregarMesa} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive">
                 <Plus size={14} /> Agregar
               </button>
             </div>
@@ -220,8 +220,8 @@ export default function ConfiguracionPage() {
 
       {/* ── Modal alta restaurante ── */}
       {mostrarAlta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setMostrarAlta(false)}>
-          <div className="w-full max-w-md rounded-2xl p-6 bg-white" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-overlay-in" onClick={() => setMostrarAlta(false)}>
+          <div className="w-full max-w-md rounded-2xl p-6 bg-white animate-panel-in" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold mb-4">Nuevo restaurante</h2>
             <div className="flex flex-col gap-3">
               <div>
@@ -265,7 +265,7 @@ export default function ConfiguracionPage() {
               <button
                 onClick={handleCrearRestaurante}
                 disabled={creando || !altaForm.usuarioId || !altaForm.nombre || !altaForm.direccion}
-                className="mt-1 py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold disabled:opacity-50"
+                className="mt-1 py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive disabled:opacity-50"
               >
                 {creando ? 'Creando…' : 'Crear restaurante'}
               </button>

@@ -196,8 +196,10 @@ export default function AccesoPage() {
                   <button
                     type="button"
                     onClick={() => setShowLoginPwd(!showLoginPwd)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition-opacity hover:opacity-70"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 btn-icon-interactive"
                     style={{ color: 'var(--color-on-surface-variant)' }}
+                    aria-label={showLoginPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    data-tooltip={showLoginPwd ? 'Ocultar' : 'Mostrar'}
                   >
                     {showLoginPwd ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
@@ -339,8 +341,10 @@ export default function AccesoPage() {
                   <button
                     type="button"
                     onClick={() => setShowRegPwd(!showRegPwd)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition-opacity hover:opacity-70"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 btn-icon-interactive"
                     style={{ color: 'var(--color-on-surface-variant)' }}
+                    aria-label={showRegPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    data-tooltip={showRegPwd ? 'Ocultar' : 'Mostrar'}
                   >
                     {showRegPwd ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>

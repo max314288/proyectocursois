@@ -192,7 +192,8 @@ export default function ProductosPage() {
                           key={e.codigo}
                           onClick={() => handleQuitarEtiqueta(item, e.codigo)}
                           className="cursor-pointer text-[11px] px-2 py-0.5 rounded-full bg-[var(--color-border)] text-[var(--color-on-surface)] hover:opacity-70"
-                          title="Quitar etiqueta"
+                          aria-label="Quitar etiqueta"
+                          data-tooltip="Quitar etiqueta"
                         >
                           {e.nombre} ×
                         </span>
@@ -210,16 +211,16 @@ export default function ProductosPage() {
                   <td className="px-5 py-3">
                     <button
                       onClick={() => handleToggle(item)}
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${item.disponible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-full btn-toggle-interactive ${item.disponible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
                     >
                       {item.disponible ? 'Disponible' : 'No disponible'}
                     </button>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <button onClick={() => abrirEditar(item)} className="p-1.5 rounded hover:bg-[var(--color-border)] mr-1">
+                    <button onClick={() => abrirEditar(item)} className="p-1.5 mr-1 btn-icon-interactive" data-tooltip="Editar" aria-label="Editar producto">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => handleEliminar(item)} className="p-1.5 rounded hover:bg-[var(--color-border)] text-red-600">
+                    <button onClick={() => handleEliminar(item)} className="p-1.5 text-red-600 btn-icon-interactive hover:bg-red-500/10" data-tooltip="Eliminar" aria-label="Eliminar producto">
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -239,11 +240,11 @@ export default function ProductosPage() {
 
       {/* ── Modal crear/editar ── */}
       {modalAbierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalAbierto(false)}>
-          <div className="w-full max-w-lg rounded-2xl p-6 bg-white max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-overlay-in" onClick={() => setModalAbierto(false)}>
+          <div className="w-full max-w-lg rounded-2xl p-6 bg-white max-h-[85vh] overflow-y-auto animate-panel-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">{editando ? 'Editar producto' : 'Nuevo producto'}</h2>
-              <button onClick={() => setModalAbierto(false)} className="p-1 text-[var(--color-muted)]">
+              <button onClick={() => setModalAbierto(false)} className="p-1 text-[var(--color-muted)] btn-icon-interactive" data-tooltip="Cerrar" aria-label="Cerrar">
                 <X size={18} />
               </button>
             </div>
@@ -336,7 +337,7 @@ export default function ProductosPage() {
               <button
                 onClick={guardar}
                 disabled={guardando || !form.nombre || !form.precio}
-                className="mt-2 w-full py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold disabled:opacity-50"
+                className="mt-2 w-full py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive disabled:opacity-50"
               >
                 {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear producto'}
               </button>

@@ -290,8 +290,10 @@ export default function PerfilPage() {
                 <button
                   type="button"
                   onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition-opacity hover:opacity-70"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 btn-icon-interactive"
                   style={{ color: 'var(--color-on-surface-variant)' }}
+                  aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  data-tooltip={showPwd ? 'Ocultar' : 'Mostrar'}
                 >
                   {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>

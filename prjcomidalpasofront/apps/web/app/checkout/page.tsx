@@ -514,7 +514,7 @@ export default function CheckoutPage() {
                   <button
                     onClick={handlePagoTarjeta}
                     disabled={processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)}
-                    className="w-full py-3.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 mt-2 transition-opacity"
+                    className="w-full py-3.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 mt-2 btn-interactive"
                     style={
                       processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)
                         ? { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }

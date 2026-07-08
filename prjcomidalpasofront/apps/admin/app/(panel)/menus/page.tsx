@@ -121,11 +121,11 @@ export default function MenusPage() {
 
       {/* ── Modal de gestión ── */}
       {gestionando && data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setGestionando(null)}>
-          <div className="w-full max-w-lg rounded-2xl p-6 bg-white max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-overlay-in" onClick={() => setGestionando(null)}>
+          <div className="w-full max-w-lg rounded-2xl p-6 bg-white max-h-[85vh] overflow-y-auto animate-panel-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">{gestionando.nombre}</h2>
-              <button onClick={() => setGestionando(null)} className="p-1 text-[var(--color-muted)]">
+              <button onClick={() => setGestionando(null)} className="p-1 text-[var(--color-muted)] btn-icon-interactive" data-tooltip="Cerrar" aria-label="Cerrar">
                 <X size={18} />
               </button>
             </div>
@@ -138,7 +138,7 @@ export default function MenusPage() {
                       <span>
                         {c.nombre} <span className="text-[var(--color-muted)]">· {c.rol}</span>
                       </span>
-                      <button onClick={() => handleQuitarComponente(gestionando.id, c.itemId)} className="text-red-600">
+                      <button onClick={() => handleQuitarComponente(gestionando.id, c.itemId)} className="text-red-600 btn-icon-interactive hover:bg-red-500/10" data-tooltip="Quitar componente" aria-label="Quitar componente">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -214,7 +214,7 @@ export default function MenusPage() {
                 <button
                   onClick={handleAgregar}
                   disabled={!itemSeleccionado}
-                  className="mt-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold disabled:opacity-50"
+                  className="mt-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive disabled:opacity-50"
                 >
                   <Plus size={14} /> Agregar
                 </button>

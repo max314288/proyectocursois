@@ -114,7 +114,7 @@ export default function CartaPage() {
           {items.map((item, idx) => (
             <article
               key={item.id}
-              className={`rounded-2xl overflow-hidden shadow-ambient flex group ${idx === 0 ? 'md:col-span-2' : ''} ${
+              className={`rounded-2xl overflow-hidden shadow-ambient flex group transition-transform duration-200 hover:-translate-y-1 ${idx === 0 ? 'md:col-span-2' : ''} ${
                 !item.disponible ? 'opacity-60' : ''
               }`}
               style={{ backgroundColor: 'var(--color-surface)' }}
