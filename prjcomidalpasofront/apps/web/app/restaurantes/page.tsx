@@ -1,10 +1,12 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MapPin, Phone, ShoppingBag, Bike, UtensilsCrossed, RefreshCw } from 'lucide-react'
 import { cargarRestaurantes, getServicios } from '@/lib/services/restauranteService'
 import type { RestauranteDTO } from '@/lib/services/restauranteApiService'
+import { useCart } from '@/store/cartStore'
+import { useRestauranteStore } from '@/store/restauranteStore'
 
 const SERVICIO_ICONS = {
   Recojo: ShoppingBag,
@@ -13,9 +15,26 @@ const SERVICIO_ICONS = {
 } as const
 
 export default function RestaurantesPage() {
+  const router = useRouter()
+  const items = useCart((s) => s.items)
+  const clearCart = useCart((s) => s.clear)
+  const seleccionar = useRestauranteStore((s) => s.seleccionar)
+  const restauranteActual = useRestauranteStore((s) => s.restaurante)
   const [restaurantes, setRestaurantes] = useState<RestauranteDTO[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+
+  function elegir(r: RestauranteDTO) {
+    if (restauranteActual && restauranteActual.id !== r.id && items.length > 0) {
+      const ok = window.confirm(
+        'Tu carrito tiene productos de otro restaurante y se vaciará si cambias. ¿Continuar?'
+      )
+      if (!ok) return
+      clearCart()
+    }
+    seleccionar({ id: r.id, nombre: r.nombre })
+    router.push(`/restaurantes/${r.id}`)
+  }
 
   async function cargar() {
     setLoading(true)
@@ -113,10 +132,10 @@ export default function RestaurantesPage() {
       {!loading && !error && restaurantes !== null && restaurantes.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {restaurantes.map((r) => (
-            <Link
+            <button
               key={r.id}
-              href={`/restaurantes/${r.id}`}
-              className="rounded-2xl p-6 shadow-ambient group flex flex-col gap-3 transition-transform duration-200 hover:-translate-y-1"
+              onClick={() => elegir(r)}
+              className="text-left rounded-2xl p-6 shadow-ambient group flex flex-col gap-3 transition-transform duration-200 hover:-translate-y-1"
               style={{ backgroundColor: 'var(--color-surface)' }}
             >
               <h2
@@ -161,7 +180,7 @@ export default function RestaurantesPage() {
                   )
                 })}
               </div>
-            </Link>
+            </button>
           ))}
         </div>
       )}

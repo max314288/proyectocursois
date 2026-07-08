@@ -105,3 +105,27 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+
+/* ── Impresión de comprobante: solo #comprobante ── */
+@media print {
+  header,
+  footer {
+    display: none !important;
+  }
+  main {
+    padding-top: 0 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #comprobante,
+  #comprobante * {
+    visibility: visible;
+  }
+  #comprobante {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

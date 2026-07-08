@@ -3,17 +3,18 @@
 import { create } from 'zustand'
 import { CartItem } from './cartStore'
 
-export type ConsumptionMode = 'salon' | 'takeaway'
-export type PaymentMethod = 'gateway' | 'presencial'
+export type ConsumptionMode = 'salon' | 'recojo'
+export type PaymentMethod = 'efectivo' | 'tarjeta'
 
 export interface ConfirmedOrder {
   id: string
   items: CartItem[]
   total: number
-  mode: ConsumptionMode
-  payment: PaymentMethod
+  modo: ConsumptionMode
+  metodo: PaymentMethod
+  codigoQr: string | null
+  referenciaExterna?: string
   createdAt: string
-  qrDataUrl?: string
 }
 
 interface OrderStore {

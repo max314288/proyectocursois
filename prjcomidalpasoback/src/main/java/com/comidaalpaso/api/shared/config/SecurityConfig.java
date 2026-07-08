@@ -1,6 +1,7 @@
 package com.comidaalpaso.api.shared.config;
 
 import com.comidaalpaso.api.shared.security.JwtAuthFilter;
+import com.comidaalpaso.api.shared.security.RestAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -32,11 +33,14 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final CorsConfigurationSource corsConfigurationSource;
+    private final RestAuthenticationEntryPoint authenticationEntryPoint;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
-                          CorsConfigurationSource corsConfigurationSource) {
+                          CorsConfigurationSource corsConfigurationSource,
+                          RestAuthenticationEntryPoint authenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.corsConfigurationSource = corsConfigurationSource;
+        this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
     @Bean
@@ -45,12 +49,22 @@ public class SecurityConfig {
             .cors(c -> c.configurationSource(corsConfigurationSource))
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(e -> e.authenticationEntryPoint(authenticationEntryPoint))
             .authorizeHttpRequests(auth -> auth
                 // ─── Públicos ─────────────────────────────────────────────────
                 .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                // ─── Catálogo público (navegar sin login) ──────────────────────
+                .requestMatchers(HttpMethod.GET,
+                    "/api/menu/categorias",
+                    "/api/menu/items",
+                    "/api/menu/items/*/componentes",
+                    "/api/menu/items/*/arma-plato",
+                    "/api/restaurantes",
+                    "/api/restaurantes/*/elegir"
+                ).permitAll()
                 // ─── Resto protegido ──────────────────────────────────────────
                 .anyRequest().authenticated()
             )

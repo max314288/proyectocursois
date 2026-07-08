@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,8 +56,9 @@ public class PedidoResource {
     public ResponseEntity<List<PedidoResumenDTO>> listarPorRestaurante(
             @PathVariable UUID restauranteId,
             @RequestParam(required = false) String estado,
-            @RequestParam(required = false) String modo) {
-        return ResponseEntity.ok(pedidoService.listarPorRestaurante(restauranteId, estado, modo));
+            @RequestParam(required = false) String modo,
+            @RequestParam(required = false) LocalDate fecha) {
+        return ResponseEntity.ok(pedidoService.listarPorRestaurante(restauranteId, estado, modo, fecha));
     }
 
     @GetMapping("/cliente")

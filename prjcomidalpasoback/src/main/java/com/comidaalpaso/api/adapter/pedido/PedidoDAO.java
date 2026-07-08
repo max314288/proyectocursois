@@ -5,6 +5,7 @@ import com.comidaalpaso.api.adapter.pedido.model.PedidoDetalleRow;
 import com.comidaalpaso.api.adapter.pedido.model.PedidoResumenRow;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,7 +16,7 @@ public interface PedidoDAO {
     void cambiarEstado(UUID pedidoId, String estado, UUID usuarioId);
     void asignarRepartidor(UUID pedidoId, UUID repartidorId);
     List<PedidoDetalleRow> obtener(UUID pedidoId);
-    List<PedidoResumenRow> listarPorRestaurante(UUID restauranteId, String estado, String modo);
+    List<PedidoResumenRow> listarPorRestaurante(UUID restauranteId, String estado, String modo, LocalDate fecha);
     List<PedidoResumenRow> listarPorCliente(UUID clienteId);
     void cancelar(UUID pedidoId);
     List<HistorialEstadoRow> historial(UUID pedidoId);

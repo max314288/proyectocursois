@@ -71,9 +71,9 @@ export interface ElegirResponse {
 
 // ─── Llamadas al API ──────────────────────────────────────────────────────────
 
-export async function listarRestaurantesApi(token: string): Promise<RestauranteDTO[]> {
+export async function listarRestaurantesApi(token?: string | null): Promise<RestauranteDTO[]> {
   const res = await fetch(`${API}/restaurantes?soloActivos=true`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
 
   if (!res.ok) {
@@ -84,9 +84,9 @@ export async function listarRestaurantesApi(token: string): Promise<RestauranteD
   return res.json() as Promise<RestauranteDTO[]>
 }
 
-export async function elegirRestauranteApi(token: string, id: string): Promise<ElegirResponse> {
+export async function elegirRestauranteApi(id: string, token?: string | null): Promise<ElegirResponse> {
   const res = await fetch(`${API}/restaurantes/${id}/elegir`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
 
   if (!res.ok) {

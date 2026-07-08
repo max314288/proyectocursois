@@ -36,7 +36,7 @@ public class PagoResource {
     }
 
     @PatchMapping("/{id}/confirmar")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, Boolean>> confirmar(
             @PathVariable UUID id,
             @RequestBody(required = false) ConfirmarPagoRequest req) {
@@ -45,7 +45,7 @@ public class PagoResource {
     }
 
     @PatchMapping("/{id}/fallo")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
     public ResponseEntity<Map<String, Boolean>> fallo(@PathVariable UUID id) {
         pagoService.fallo(id);
         return ResponseEntity.accepted().body(Map.of("ok", true));

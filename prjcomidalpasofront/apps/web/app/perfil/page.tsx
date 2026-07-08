@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, AlertCircle, CheckCircle, User, KeyRound } from 'lucide-react'
+import Link from 'next/link'
+import { Eye, EyeOff, AlertCircle, CheckCircle, User, KeyRound, Receipt, ChevronRight } from 'lucide-react'
 import { estaAutenticado, getUsuario } from '@/lib/services/authService'
 import {
   actualizarPerfil,
@@ -108,6 +109,26 @@ export default function PerfilPage() {
       >
         Mi Perfil
       </h1>
+
+      {/* ── Mis pedidos ── */}
+      <Link
+        href="/perfil/pedidos"
+        className="flex items-center justify-between rounded-2xl p-6 mb-8 shadow-ambient hover:opacity-90 transition-opacity"
+        style={{ backgroundColor: 'var(--color-surface-container-lowest, #ffffff)' }}
+      >
+        <div className="flex items-center gap-3">
+          <Receipt size={20} style={{ color: 'var(--color-primary)' }} />
+          <div>
+            <p className="font-semibold" style={{ color: 'var(--color-on-surface)' }}>
+              Mis pedidos
+            </p>
+            <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
+              Historial, seguimiento y comprobantes
+            </p>
+          </div>
+        </div>
+        <ChevronRight size={18} style={{ color: 'var(--color-on-surface-variant)' }} />
+      </Link>
 
       {/* ── Datos personales ── */}
       <section

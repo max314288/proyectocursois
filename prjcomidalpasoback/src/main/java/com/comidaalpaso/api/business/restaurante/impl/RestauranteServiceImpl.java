@@ -108,4 +108,13 @@ public class RestauranteServiceImpl implements RestauranteService {
 
         return new ElegirRestauranteDTO(restauranteDTO, categorias, etiquetas, items);
     }
+
+    @Override
+    public RestauranteDTO miRestaurante(UUID usuarioId) {
+        UUID restauranteId = restauranteDAO.findRestauranteIdByUsuarioId(usuarioId)
+            .orElseThrow(() -> new ResourceNotFoundException("El usuario no tiene un restaurante asignado"));
+        Restaurante restaurante = restauranteDAO.findById(restauranteId)
+            .orElseThrow(() -> new ResourceNotFoundException("Restaurante no encontrado"));
+        return RestauranteDTO.from(restaurante);
+    }
 }

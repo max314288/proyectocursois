@@ -9,6 +9,7 @@ import {
   Check, RefreshCw, X, Layers,
 } from 'lucide-react'
 import { useCart } from '@/store/cartStore'
+import { useRestauranteStore } from '@/store/restauranteStore'
 import {
   cargarCarta,
   getServicios,
@@ -39,6 +40,7 @@ function esTipoMultiple(tipo: string): boolean {
 export default function RestauranteDetallePage() {
   const { id } = useParams<{ id: string }>()
   const add = useCart((s) => s.add)
+  const seleccionar = useRestauranteStore((s) => s.seleccionar)
 
   const [data, setData] = useState<ElegirResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,6 +61,7 @@ export default function RestauranteDetallePage() {
       setError(true)
     } else {
       setData(res)
+      seleccionar({ id, nombre: res.restaurante.nombre })
     }
   }
 

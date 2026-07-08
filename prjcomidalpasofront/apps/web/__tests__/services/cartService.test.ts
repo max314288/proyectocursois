@@ -15,6 +15,8 @@ import type { CartItem } from '@/store/cartStore'
 const mockItems: CartItem[] = [
   {
     id: '1',
+    itemMenuId: 'item-1',
+    restauranteId: 'rest-1',
     name: 'Menú Campesino',
     price: 16900,
     quantity: 2,
@@ -23,6 +25,8 @@ const mockItems: CartItem[] = [
   },
   {
     id: '2',
+    itemMenuId: 'item-2',
+    restauranteId: 'rest-1',
     name: 'Bowl de Pollo',
     price: 25000,
     quantity: 1,

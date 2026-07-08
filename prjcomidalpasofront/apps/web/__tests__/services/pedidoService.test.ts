@@ -5,59 +5,40 @@
 import {
   calcularPrecioBowl,
   puedeAvanzarPaso,
-  toggleTopping,
+  toggleOpcion,
   construirNombreBowl,
   seleccionACartItem,
-  obtenerSeleccionActual,
+  estaSeleccionado,
   BOWL_SELECTION_INICIAL,
   type BowlSelection,
 } from '@/lib/services/pedidoService'
-import { BOWL_BASE_PRICE } from '@/lib/data'
-import type { BuilderItem } from '@/lib/data'
+import type { ItemCartaDTO, OpcionArmaPlatoDTO } from '@/lib/services/restauranteApiService'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const mockBase: BuilderItem = {
-  id: 'base-1',
-  name: 'Arroz Integral',
-  image: '/images/base1.jpg',
-  price: 0,
+const armaPlatoItem: ItemCartaDTO = {
+  id: 'arma-1',
+  nombre: 'Arma tu plato',
+  categoria: 'Arma tu plato',
+  descripcion: null,
+  precio: 10900,
+  pesoGramos: null,
+  informacionNutricional: null,
+  esMenuCompuesto: false,
+  esArmaPlato: true,
+  disponible: true,
+  imagenUrl: null,
+  etiquetas: [],
+  componentes: [],
+  opcionesArmaPlato: [],
 }
 
-const mockBaseExtra: BuilderItem = {
-  id: 'base-2',
-  name: 'Quinoa',
-  image: '/images/base2.jpg',
-  price: 1000,
-}
-
-const mockProteina: BuilderItem = {
-  id: 'prot-1',
-  name: 'Pollo a la Plancha',
-  image: '/images/proteina1.jpg',
-  price: 4500,
-}
-
-const mockTopping1: BuilderItem = {
-  id: 'top-1',
-  name: 'Aguacate + Tomates Cherry',
-  image: '/images/topping1.jpg',
-  price: 2000,
-}
-
-const mockTopping2: BuilderItem = {
-  id: 'top-2',
-  name: 'Mix de Quesos',
-  image: '/images/topping2.jpg',
-  price: 1500,
-}
-
-const mockBebida: BuilderItem = {
-  id: 'beb-1',
-  name: 'Limonada Natural',
-  image: '/images/bebida1.jpg',
-  price: 3500,
-}
+const mockBase: OpcionArmaPlatoDTO = { tipo: 'base', itemId: 'base-1', nombre: 'Arroz Integral', precioExtra: 0, disponible: true }
+const mockBaseExtra: OpcionArmaPlatoDTO = { tipo: 'base', itemId: 'base-2', nombre: 'Quinoa', precioExtra: 1000, disponible: true }
+const mockProteina: OpcionArmaPlatoDTO = { tipo: 'proteina', itemId: 'prot-1', nombre: 'Pollo a la Plancha', precioExtra: 4500, disponible: true }
+const mockTopping1: OpcionArmaPlatoDTO = { tipo: 'topping', itemId: 'top-1', nombre: 'Aguacate + Tomates Cherry', precioExtra: 2000, disponible: true }
+const mockTopping2: OpcionArmaPlatoDTO = { tipo: 'topping', itemId: 'top-2', nombre: 'Mix de Quesos', precioExtra: 1500, disponible: true }
+const mockBebida: OpcionArmaPlatoDTO = { tipo: 'bebida', itemId: 'beb-1', nombre: 'Limonada Natural', precioExtra: 3500, disponible: true }
 
 const selCompleta: BowlSelection = {
   base: mockBase,
@@ -66,93 +47,93 @@ const selCompleta: BowlSelection = {
   bebida: mockBebida,
 }
 
+const TIPOS_OBLIGATORIOS = ['base', 'proteina', 'bebida']
+
 // ─── calcularPrecioBowl ───────────────────────────────────────────────────────
 
 describe('calcularPrecioBowl', () => {
   it('debe retornar solo el precio base con selección vacía', () => {
-    expect(calcularPrecioBowl(BOWL_SELECTION_INICIAL)).toBe(BOWL_BASE_PRICE)
+    expect(calcularPrecioBowl(armaPlatoItem, BOWL_SELECTION_INICIAL)).toBe(armaPlatoItem.precio)
   })
 
   it('debe sumar todos los componentes seleccionados', () => {
-    // BOWL_BASE_PRICE(10900) + base(0) + proteina(4500) + topping1(2000) + bebida(3500) = 20900
-    expect(calcularPrecioBowl(selCompleta)).toBe(BOWL_BASE_PRICE + 0 + 4500 + 2000 + 3500)
+    expect(calcularPrecioBowl(armaPlatoItem, selCompleta)).toBe(armaPlatoItem.precio + 0 + 4500 + 2000 + 3500)
   })
 
   it('debe incluir el precio extra de una base con costo', () => {
     const sel = { ...BOWL_SELECTION_INICIAL, base: mockBaseExtra }
-    expect(calcularPrecioBowl(sel)).toBe(BOWL_BASE_PRICE + 1000)
+    expect(calcularPrecioBowl(armaPlatoItem, sel)).toBe(armaPlatoItem.precio + 1000)
   })
 
   it('debe sumar múltiples toppings', () => {
     const sel = { ...BOWL_SELECTION_INICIAL, toppings: [mockTopping1, mockTopping2] }
-    expect(calcularPrecioBowl(sel)).toBe(BOWL_BASE_PRICE + 2000 + 1500)
+    expect(calcularPrecioBowl(armaPlatoItem, sel)).toBe(armaPlatoItem.precio + 2000 + 1500)
   })
 
   it('debe manejar toppings vacíos correctamente', () => {
     const sel = { ...BOWL_SELECTION_INICIAL, base: mockBase, proteina: mockProteina, toppings: [], bebida: mockBebida }
-    expect(calcularPrecioBowl(sel)).toBe(BOWL_BASE_PRICE + 4500 + 3500)
+    expect(calcularPrecioBowl(armaPlatoItem, sel)).toBe(armaPlatoItem.precio + 4500 + 3500)
   })
 })
 
 // ─── puedeAvanzarPaso ─────────────────────────────────────────────────────────
 
 describe('puedeAvanzarPaso', () => {
-  it('paso 0: no puede avanzar sin base', () => {
-    expect(puedeAvanzarPaso(0, BOWL_SELECTION_INICIAL)).toBe(false)
+  it('base: no puede avanzar sin base', () => {
+    expect(puedeAvanzarPaso('base', BOWL_SELECTION_INICIAL)).toBe(false)
   })
 
-  it('paso 0: puede avanzar con base seleccionada', () => {
-    expect(puedeAvanzarPaso(0, { ...BOWL_SELECTION_INICIAL, base: mockBase })).toBe(true)
+  it('base: puede avanzar con base seleccionada', () => {
+    expect(puedeAvanzarPaso('base', { ...BOWL_SELECTION_INICIAL, base: mockBase })).toBe(true)
   })
 
-  it('paso 1: no puede avanzar sin proteína', () => {
-    expect(puedeAvanzarPaso(1, BOWL_SELECTION_INICIAL)).toBe(false)
+  it('proteina: no puede avanzar sin proteína', () => {
+    expect(puedeAvanzarPaso('proteina', BOWL_SELECTION_INICIAL)).toBe(false)
   })
 
-  it('paso 1: puede avanzar con proteína seleccionada', () => {
-    expect(puedeAvanzarPaso(1, { ...BOWL_SELECTION_INICIAL, proteina: mockProteina })).toBe(true)
+  it('proteina: puede avanzar con proteína seleccionada', () => {
+    expect(puedeAvanzarPaso('proteina', { ...BOWL_SELECTION_INICIAL, proteina: mockProteina })).toBe(true)
   })
 
-  it('paso 2: siempre puede avanzar (toppings opcionales)', () => {
-    expect(puedeAvanzarPaso(2, BOWL_SELECTION_INICIAL)).toBe(true)
-    expect(puedeAvanzarPaso(2, selCompleta)).toBe(true)
+  it('topping: siempre puede avanzar (opcional)', () => {
+    expect(puedeAvanzarPaso('topping', BOWL_SELECTION_INICIAL)).toBe(true)
+    expect(puedeAvanzarPaso('topping', selCompleta)).toBe(true)
   })
 
-  it('paso 3: no puede avanzar sin bebida', () => {
-    expect(puedeAvanzarPaso(3, BOWL_SELECTION_INICIAL)).toBe(false)
+  it('bebida: no puede avanzar sin bebida', () => {
+    expect(puedeAvanzarPaso('bebida', BOWL_SELECTION_INICIAL)).toBe(false)
   })
 
-  it('paso 3: puede avanzar con bebida seleccionada', () => {
-    expect(puedeAvanzarPaso(3, { ...BOWL_SELECTION_INICIAL, bebida: mockBebida })).toBe(true)
+  it('bebida: puede avanzar con bebida seleccionada', () => {
+    expect(puedeAvanzarPaso('bebida', { ...BOWL_SELECTION_INICIAL, bebida: mockBebida })).toBe(true)
   })
 })
 
-// ─── toggleTopping ────────────────────────────────────────────────────────────
+// ─── toggleOpcion ─────────────────────────────────────────────────────────────
 
-describe('toggleTopping', () => {
-  it('debe agregar el topping si no existe en la lista', () => {
-    const result = toggleTopping([], mockTopping1)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toBe(mockTopping1)
+describe('toggleOpcion', () => {
+  it('topping: debe agregar el topping si no existe en la lista', () => {
+    const result = toggleOpcion(BOWL_SELECTION_INICIAL, 'topping', mockTopping1)
+    expect(result.toppings).toHaveLength(1)
+    expect(result.toppings[0]).toBe(mockTopping1)
   })
 
-  it('debe quitar el topping si ya existe', () => {
-    const result = toggleTopping([mockTopping1], mockTopping1)
-    expect(result).toHaveLength(0)
+  it('topping: debe quitar el topping si ya existe', () => {
+    const sel = { ...BOWL_SELECTION_INICIAL, toppings: [mockTopping1] }
+    const result = toggleOpcion(sel, 'topping', mockTopping1)
+    expect(result.toppings).toHaveLength(0)
   })
 
-  it('debe agregar sin afectar los toppings existentes', () => {
-    const result = toggleTopping([mockTopping1], mockTopping2)
-    expect(result).toHaveLength(2)
-    expect(result).toContain(mockTopping1)
-    expect(result).toContain(mockTopping2)
+  it('topping: no debe mutar la selección original', () => {
+    const sel = { ...BOWL_SELECTION_INICIAL, toppings: [mockTopping1] }
+    toggleOpcion(sel, 'topping', mockTopping2)
+    expect(sel.toppings).toHaveLength(1)
   })
 
-  it('no debe mutar el array original', () => {
-    const original = [mockTopping1]
-    const originalLength = original.length
-    toggleTopping(original, mockTopping2)
-    expect(original).toHaveLength(originalLength) // no mutado
+  it('base: reemplaza la selección única', () => {
+    const sel = toggleOpcion(BOWL_SELECTION_INICIAL, 'base', mockBase)
+    const result = toggleOpcion(sel, 'base', mockBaseExtra)
+    expect(result.base).toBe(mockBaseExtra)
   })
 })
 
@@ -160,122 +141,95 @@ describe('toggleTopping', () => {
 
 describe('construirNombreBowl', () => {
   it('debe construir el nombre con base + proteína', () => {
-    expect(construirNombreBowl(selCompleta)).toBe(
-      'Bowl: Arroz Integral + Pollo a la Plancha'
+    expect(construirNombreBowl(armaPlatoItem, selCompleta)).toBe(
+      `${armaPlatoItem.nombre}: Arroz Integral + Pollo a la Plancha`
     )
   })
 
-  it('debe retornar nombre genérico si no hay base', () => {
-    expect(construirNombreBowl({ ...selCompleta, base: null })).toBe('Bowl personalizado')
+  it('debe retornar el nombre del item si no hay base', () => {
+    expect(construirNombreBowl(armaPlatoItem, { ...selCompleta, base: null })).toBe(armaPlatoItem.nombre)
   })
 
-  it('debe retornar nombre genérico si no hay proteína', () => {
-    expect(construirNombreBowl({ ...selCompleta, proteina: null })).toBe('Bowl personalizado')
-  })
-
-  it('debe retornar nombre genérico con selección vacía', () => {
-    expect(construirNombreBowl(BOWL_SELECTION_INICIAL)).toBe('Bowl personalizado')
+  it('debe retornar el nombre del item si no hay proteína', () => {
+    expect(construirNombreBowl(armaPlatoItem, { ...selCompleta, proteina: null })).toBe(armaPlatoItem.nombre)
   })
 })
 
 // ─── seleccionACartItem ───────────────────────────────────────────────────────
 
 describe('seleccionACartItem', () => {
+  const restauranteId = 'rest-1'
+
   it('debe crear un CartItem válido con selección completa', () => {
-    const item = seleccionACartItem(selCompleta)
+    const item = seleccionACartItem(armaPlatoItem, restauranteId, selCompleta, TIPOS_OBLIGATORIOS)
     expect(item).not.toBeNull()
   })
 
-  it('debe usar el nombre construido del bowl', () => {
-    const item = seleccionACartItem(selCompleta)!
-    expect(item.name).toBe(construirNombreBowl(selCompleta))
-  })
-
   it('debe calcular el precio correcto del bowl', () => {
-    const item = seleccionACartItem(selCompleta)!
-    expect(item.price).toBe(calcularPrecioBowl(selCompleta))
+    const item = seleccionACartItem(armaPlatoItem, restauranteId, selCompleta, TIPOS_OBLIGATORIOS)!
+    expect(item.price).toBe(calcularPrecioBowl(armaPlatoItem, selCompleta))
   })
 
-  it('debe usar la imagen de la proteína', () => {
-    const item = seleccionACartItem(selCompleta)!
-    expect(item.image).toBe(mockProteina.image)
-  })
-
-  it('debe asignar la categoría "bowl"', () => {
-    const item = seleccionACartItem(selCompleta)!
-    expect(item.category).toBe('bowl')
+  it('debe referenciar el itemMenuId y restauranteId', () => {
+    const item = seleccionACartItem(armaPlatoItem, restauranteId, selCompleta, TIPOS_OBLIGATORIOS)!
+    expect(item.itemMenuId).toBe(armaPlatoItem.id)
+    expect(item.restauranteId).toBe(restauranteId)
   })
 
   it('el ID debe comenzar con "bowl-"', () => {
-    const item = seleccionACartItem(selCompleta)!
+    const item = seleccionACartItem(armaPlatoItem, restauranteId, selCompleta, TIPOS_OBLIGATORIOS)!
     expect(item.id.startsWith('bowl-')).toBe(true)
   })
 
-  it('debe retornar null si falta la base', () => {
-    expect(seleccionACartItem({ ...selCompleta, base: null })).toBeNull()
+  it('debe retornar null si falta la base obligatoria', () => {
+    expect(seleccionACartItem(armaPlatoItem, restauranteId, { ...selCompleta, base: null }, TIPOS_OBLIGATORIOS)).toBeNull()
   })
 
-  it('debe retornar null si falta la proteína', () => {
-    expect(seleccionACartItem({ ...selCompleta, proteina: null })).toBeNull()
+  it('debe retornar null si falta la proteína obligatoria', () => {
+    expect(seleccionACartItem(armaPlatoItem, restauranteId, { ...selCompleta, proteina: null }, TIPOS_OBLIGATORIOS)).toBeNull()
   })
 
-  it('debe retornar null si falta la bebida', () => {
-    expect(seleccionACartItem({ ...selCompleta, bebida: null })).toBeNull()
+  it('debe retornar null si falta la bebida obligatoria', () => {
+    expect(seleccionACartItem(armaPlatoItem, restauranteId, { ...selCompleta, bebida: null }, TIPOS_OBLIGATORIOS)).toBeNull()
+  })
+
+  it('no debe exigir un tipo que no está en la lista de obligatorios', () => {
+    const item = seleccionACartItem(armaPlatoItem, restauranteId, { ...selCompleta, bebida: null }, ['base', 'proteina'])
+    expect(item).not.toBeNull()
   })
 })
 
-// ─── obtenerSeleccionActual ───────────────────────────────────────────────────
+// ─── estaSeleccionado ─────────────────────────────────────────────────────────
 
-describe('obtenerSeleccionActual', () => {
-  it('paso 0: detecta la base seleccionada', () => {
-    expect(obtenerSeleccionActual(0, selCompleta, 'base-1')).toBe(true)
+describe('estaSeleccionado', () => {
+  it('base: detecta la base seleccionada', () => {
+    expect(estaSeleccionado(selCompleta, 'base', 'base-1')).toBe(true)
+    expect(estaSeleccionado(selCompleta, 'base', 'base-2')).toBe(false)
   })
 
-  it('paso 0: retorna false para base no seleccionada', () => {
-    expect(obtenerSeleccionActual(0, selCompleta, 'base-2')).toBe(false)
+  it('proteina: detecta la proteína seleccionada', () => {
+    expect(estaSeleccionado(selCompleta, 'proteina', 'prot-1')).toBe(true)
+    expect(estaSeleccionado(selCompleta, 'proteina', 'prot-2')).toBe(false)
   })
 
-  it('paso 1: detecta la proteína seleccionada', () => {
-    expect(obtenerSeleccionActual(1, selCompleta, 'prot-1')).toBe(true)
+  it('topping: detecta el topping seleccionado', () => {
+    expect(estaSeleccionado(selCompleta, 'topping', 'top-1')).toBe(true)
+    expect(estaSeleccionado(selCompleta, 'topping', 'top-2')).toBe(false)
   })
 
-  it('paso 1: retorna false para proteína no seleccionada', () => {
-    expect(obtenerSeleccionActual(1, selCompleta, 'prot-2')).toBe(false)
-  })
-
-  it('paso 2: detecta el topping seleccionado', () => {
-    expect(obtenerSeleccionActual(2, selCompleta, 'top-1')).toBe(true)
-  })
-
-  it('paso 2: retorna false para topping no seleccionado', () => {
-    expect(obtenerSeleccionActual(2, selCompleta, 'top-2')).toBe(false)
-  })
-
-  it('paso 3: detecta la bebida seleccionada', () => {
-    expect(obtenerSeleccionActual(3, selCompleta, 'beb-1')).toBe(true)
-  })
-
-  it('paso 3: retorna false para bebida no seleccionada', () => {
-    expect(obtenerSeleccionActual(3, selCompleta, 'beb-2')).toBe(false)
+  it('bebida: detecta la bebida seleccionada', () => {
+    expect(estaSeleccionado(selCompleta, 'bebida', 'beb-1')).toBe(true)
+    expect(estaSeleccionado(selCompleta, 'bebida', 'beb-2')).toBe(false)
   })
 })
 
 // ─── BOWL_SELECTION_INICIAL ───────────────────────────────────────────────────
 
 describe('BOWL_SELECTION_INICIAL', () => {
-  it('debe tener base null', () => {
+  it('debe tener base, proteína y bebida null, y toppings vacío', () => {
     expect(BOWL_SELECTION_INICIAL.base).toBeNull()
-  })
-
-  it('debe tener proteína null', () => {
     expect(BOWL_SELECTION_INICIAL.proteina).toBeNull()
-  })
-
-  it('debe tener toppings vacío', () => {
     expect(BOWL_SELECTION_INICIAL.toppings).toHaveLength(0)
-  })
-
-  it('debe tener bebida null', () => {
     expect(BOWL_SELECTION_INICIAL.bebida).toBeNull()
   })
 })

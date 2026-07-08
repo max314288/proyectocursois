@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -82,8 +83,8 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
-    public List<PedidoResumenDTO> listarPorRestaurante(UUID restauranteId, String estado, String modo) {
-        return pedidoDAO.listarPorRestaurante(restauranteId, estado, modo)
+    public List<PedidoResumenDTO> listarPorRestaurante(UUID restauranteId, String estado, String modo, LocalDate fecha) {
+        return pedidoDAO.listarPorRestaurante(restauranteId, estado, modo, fecha)
             .stream().map(PedidoResumenDTO::from).toList();
     }
 

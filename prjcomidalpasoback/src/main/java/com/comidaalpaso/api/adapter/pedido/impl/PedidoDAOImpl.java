@@ -123,14 +123,16 @@ public class PedidoDAOImpl implements PedidoDAO {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PedidoResumenRow> listarPorRestaurante(UUID restauranteId, String estado, String modo) {
+    public List<PedidoResumenRow> listarPorRestaurante(UUID restauranteId, String estado, String modo, LocalDate fecha) {
         StoredProcedureQuery q = em.createStoredProcedureQuery("sp_listar_pedidos_restaurante")
             .registerStoredProcedureParameter("restaurante_id", String.class, ParameterMode.IN)
             .registerStoredProcedureParameter("estado",         String.class, ParameterMode.IN)
             .registerStoredProcedureParameter("modo",           String.class, ParameterMode.IN)
+            .registerStoredProcedureParameter("fecha",          String.class, ParameterMode.IN)
             .setParameter("restaurante_id", restauranteId.toString())
             .setParameter("estado",         estado)
-            .setParameter("modo",           modo);
+            .setParameter("modo",           modo)
+            .setParameter("fecha",          fecha != null ? fecha.toString() : null);
 
         @SuppressWarnings("unchecked")
         List<Object[]> rows = q.getResultList();

@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCart } from '@/store/cartStore'
+import { useRestauranteStore } from '@/store/restauranteStore'
 import { estaAutenticado } from '@/lib/services/authService'
-import { ShoppingBag, Menu, X } from 'lucide-react'
+import { ShoppingBag, Menu, X, Store } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 const baseLinks = [
@@ -20,6 +21,7 @@ const baseLinks = [
 export default function Nav() {
   const pathname = usePathname()
   const count = useCart((s) => s.count())
+  const restaurante = useRestauranteStore((s) => s.restaurante)
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -40,6 +42,17 @@ export default function Nav() {
         <Link href="/" className="font-newsreader text-xl font-semibold text-primary">
           Comida al Paso
         </Link>
+
+        {mounted && restaurante && (
+          <Link
+            href="/restaurantes"
+            className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface-variant"
+            title="Cambiar restaurante"
+          >
+            <Store size={12} />
+            {restaurante.nombre}
+          </Link>
+        )}
 
         <nav className="hidden md:flex items-center gap-6">
           {links.map((l) => (
@@ -81,6 +94,16 @@ export default function Nav() {
 
       {open && (
         <div className="md:hidden border-t border-outline-variant bg-surface-container-low px-6 py-4 flex flex-col gap-4">
+          {mounted && restaurante && (
+            <Link
+              href="/restaurantes"
+              onClick={() => setOpen(false)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-on-surface-variant"
+            >
+              <Store size={12} />
+              {restaurante.nombre} · cambiar
+            </Link>
+          )}
           {links.map((l) => (
             <Link
               key={l.href}

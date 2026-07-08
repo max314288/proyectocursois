@@ -56,7 +56,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (JwtAuthException ex) {
                 SecurityContextHolder.clearContext();
-                // Dejamos pasar — el endpoint protegido respondera 400 vía SecurityConfig
+                // Dejamos pasar sin autenticar — RestAuthenticationEntryPoint responde 401
+                // con este motivo si el endpoint requiere autenticación.
+                req.setAttribute(RestAuthenticationEntryPoint.AUTH_ERROR_ATTR, ex.getMessage());
             }
         }
         chain.doFilter(req, res);

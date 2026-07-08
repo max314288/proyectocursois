@@ -14,4 +14,5 @@ public interface RestauranteService {
     void actualizar(UUID id, UpdateRestauranteRequest req);
     void toggle(UUID id, boolean activo);
     ElegirRestauranteDTO elegir(UUID restauranteId);
+    RestauranteDTO miRestaurante(UUID usuarioId);
 }

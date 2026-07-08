@@ -43,7 +43,6 @@ public class MenuResource {
     // ─── categorías ────────────────────────────────────────────────────────────
 
     @GetMapping("/categorias")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<CategoriaMenuDTO>> listarCategorias() {
         return ResponseEntity.ok(menuService.listarCategorias());
     }
@@ -51,7 +50,6 @@ public class MenuResource {
     // ─── items ─────────────────────────────────────────────────────────────────
 
     @GetMapping("/items")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ItemMenuDTO>> listarItems(
             @RequestParam(required = false) UUID restauranteId,
             @RequestParam(required = false) String categoria,
@@ -101,7 +99,6 @@ public class MenuResource {
     // ─── componentes de menú compuesto ─────────────────────────────────────────
 
     @GetMapping("/items/{menuId}/componentes")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ComponenteMenuDTO>> listarComponentes(@PathVariable UUID menuId) {
         return ResponseEntity.ok(menuService.listarComponentesMenu(menuId));
     }
@@ -129,7 +126,6 @@ public class MenuResource {
     // ─── opciones arma-plato ───────────────────────────────────────────────────
 
     @GetMapping("/items/{armaPlatoId}/arma-plato")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<OpcionArmaPlatoDTO>> listarOpciones(@PathVariable UUID armaPlatoId) {
         return ResponseEntity.ok(menuService.listarOpcionesArmaPlato(armaPlatoId));
     }

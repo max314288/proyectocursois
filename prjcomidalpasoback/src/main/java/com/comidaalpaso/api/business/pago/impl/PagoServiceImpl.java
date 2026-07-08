@@ -20,7 +20,13 @@ public class PagoServiceImpl implements PagoService {
 
     @Override
     public UUID registrar(RegistrarPagoRequest req) {
-        return pagoDAO.registrar(req.getPedidoId(), req.getMetodo(), req.getReferenciaExterna());
+        UUID id = pagoDAO.registrar(req.getPedidoId(), req.getMetodo(), req.getReferenciaExterna());
+        // "tarjeta" simula una pasarela que confirma el cobro de forma síncrona al momento del pedido.
+        // "efectivo"/"transferencia" quedan pendientes hasta que el restaurante confirma el cobro físico.
+        if ("tarjeta".equals(req.getMetodo())) {
+            pagoDAO.confirmar(id, req.getReferenciaExterna());
+        }
+        return id;
     }
 
     @Override

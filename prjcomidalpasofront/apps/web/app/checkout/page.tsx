@@ -6,16 +6,11 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useCart } from '@/store/cartStore'
 import { useOrderStore, type ConsumptionMode, type PaymentMethod } from '@/store/orderStore'
-import {
-  generarOrderId,
-  formatearNumeroTarjeta,
-  formatearExpiry,
-  esPresencialDisponible,
-  tarjetaCompleta,
-  construirQRPayload,
-  requiereQR,
-  QR_CONFIG,
-} from '@/lib/services/checkoutService'
+import { estaAutenticado } from '@/lib/services/authService'
+import { crearPedido, registrarPago, obtenerPedido, listarMesas } from '@/lib/services/pedidoApiService'
+import { ApiError } from '@/lib/services/apiClient'
+import { formatearNumeroTarjeta, formatearExpiry, tarjetaCompleta } from '@/lib/services/checkoutService'
+import type { MesaDTO } from '@/lib/services/types'
 import {
   Check,
   ChevronRight,
@@ -23,30 +18,38 @@ import {
   ShoppingBag,
   CreditCard,
   Lock,
-  MapPin,
+  Banknote,
   QrCode,
   Loader2,
   ArrowLeft,
+  Printer,
+  AlertTriangle,
 } from 'lucide-react'
 
-/* ─── types ─── */
 type Step = 'mode' | 'payment' | 'card' | 'done'
 
 const STEP_LABELS = ['Modalidad', 'Pago', 'Confirmación']
 const stepIndex: Record<Step, number> = { mode: 0, payment: 1, card: 1, done: 2 }
 
-/* ─── Component ─── */
 export default function CheckoutPage() {
   const router = useRouter()
   const { items, total, count, clear } = useCart()
   const setOrder = useOrderStore((s) => s.set)
+  const order = useOrderStore((s) => s.order)
 
   const [step, setStep] = useState<Step>('mode')
   const [mode, setMode] = useState<ConsumptionMode | null>(null)
   const [payment, setPayment] = useState<PaymentMethod | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
-  const [orderId, setOrderId] = useState('')
+  const [totalDifiere, setTotalDifiere] = useState(false)
+
+  // Salón: mesa
+  const [mesas, setMesas] = useState<MesaDTO[]>([])
+  const [mesaId, setMesaId] = useState<string | null>(null)
+  const [numComensales, setNumComensales] = useState(1)
+  const [cargandoMesas, setCargandoMesas] = useState(false)
 
   // Card form
   const [cardNum, setCardNum] = useState('')
@@ -54,86 +57,104 @@ export default function CheckoutPage() {
   const [expiry, setExpiry] = useState('')
   const [cvv, setCvv] = useState('')
 
-  // Redirect if cart is empty (and not on done step)
+  const restauranteId = items[0]?.restauranteId
+
+  // Guard: sesión requerida
+  useEffect(() => {
+    if (!estaAutenticado()) {
+      router.replace('/acceso?next=/checkout')
+    }
+  }, [router])
+
+  // Guard: carrito vacío
   useEffect(() => {
     if (items.length === 0 && step !== 'done') {
       router.replace('/pedido')
     }
   }, [items, step, router])
 
-  /* ── confirm: handle presencial (salon) ── */
-  function handlePresencial() {
-    // CONTROLLER delegado a checkoutService (MVC + SOLID-S)
-    const id = generarOrderId()
-    setOrderId(id)
-    const order = {
-      id,
-      items: [...items],
-      total: total(),
-      mode: 'salon' as ConsumptionMode,
-      payment: 'presencial' as PaymentMethod,
-      createdAt: new Date().toISOString(),
+  // Cargar mesas al elegir salón
+  useEffect(() => {
+    if (mode !== 'salon' || !restauranteId) return
+    setCargandoMesas(true)
+    listarMesas(restauranteId)
+      .then((data) => setMesas(data))
+      .catch(() => setMesas([]))
+      .finally(() => setCargandoMesas(false))
+  }, [mode, restauranteId])
+
+  async function finalizarPedido(metodo: PaymentMethod, referenciaExterna?: string) {
+    if (!restauranteId || !mode) return
+    setProcessing(true)
+    setErrorMsg(null)
+    try {
+      const { id: pedidoId } = await crearPedido({
+        restauranteId,
+        modo: mode === 'recojo' ? 'recojo' : 'salon',
+        items: items.map((i) => ({ itemMenuId: i.itemMenuId, cantidad: i.quantity, notasItem: i.notasItem })),
+        mesaId: mode === 'salon' ? mesaId ?? undefined : undefined,
+        numComensales: mode === 'salon' ? numComensales : undefined,
+      })
+
+      await registrarPago({ pedidoId, metodo, referenciaExterna })
+      const detalle = await obtenerPedido(pedidoId)
+
+      setTotalDifiere(Math.abs(detalle.total - total()) > 0.01)
+
+      if (metodo === 'efectivo' && detalle.codigoQr) {
+        try {
+          const QRCode = await import('qrcode')
+          const payload = JSON.stringify({
+            pedido: pedidoId,
+            codigo: detalle.codigoQr,
+            items: items.length,
+            total: detalle.total,
+            modo: mode,
+          })
+          setQrDataUrl(
+            await QRCode.toDataURL(payload, {
+              width: 280,
+              margin: 2,
+              color: { dark: '#1e1b18', light: '#fff8f5' },
+              errorCorrectionLevel: 'M',
+            })
+          )
+        } catch {
+          // sin QR si falla la generación — el pedido ya quedó registrado
+        }
+      }
+
+      setOrder({
+        id: pedidoId,
+        items: [...items],
+        total: detalle.total,
+        modo: mode,
+        metodo,
+        codigoQr: detalle.codigoQr,
+        referenciaExterna,
+        createdAt: new Date().toISOString(),
+      })
+      clear()
+      setStep('done')
+    } catch (err) {
+      setErrorMsg(err instanceof ApiError ? err.message : 'No se pudo procesar el pedido. Intenta de nuevo.')
+    } finally {
+      setProcessing(false)
     }
-    setOrder(order)
-    clear()
-    setStep('done')
   }
 
-  /* ── confirm: handle web payment ── */
-  async function handleWebPayment() {
+  async function handlePagoTarjeta() {
     setProcessing(true)
-
-    // Simulate gateway processing
-    await new Promise((r) => setTimeout(r, 2200))
-
-    // CONTROLLER delegado a checkoutService (MVC + SOLID-S)
-    const id = generarOrderId()
-    setOrderId(id)
-
-    let qrUrl = ''
-
-    // QR solo para Takeaway — lógica delegada al servicio
-    if (requiereQR(mode!, 'gateway')) {
-      try {
-        const QRCode = await import('qrcode')
-        // Payload y configuración del QR centralizados en checkoutService
-        qrUrl = await QRCode.toDataURL(
-          construirQRPayload(id, items.length, total()),
-          QR_CONFIG
-        )
-        setQrDataUrl(qrUrl)
-      } catch {
-        // fallback: sin QR
-      }
-    }
-
-    const order = {
-      id,
-      items: [...items],
-      total: total(),
-      mode: mode!,
-      payment: 'gateway' as PaymentMethod,
-      createdAt: new Date().toISOString(),
-      qrDataUrl: qrUrl || undefined,
-    }
-    setOrder(order)
-    clear()
-    setProcessing(false)
-    setStep('done')
+    await new Promise((r) => setTimeout(r, 1800)) // simulación de pasarela
+    await finalizarPedido('tarjeta', cardNum.replace(/\s/g, '').slice(-4))
   }
 
   const cartTotal = total()
   const cartCount = count()
 
-  /* ────────────────────────────── RENDER ────────────────────────────── */
   return (
-    <div
-      className="min-h-[calc(100vh-4rem)] py-10 px-6"
-      style={{ backgroundColor: 'var(--color-surface-container-low)' }}
-    >
+    <div className="min-h-[calc(100vh-4rem)] py-10 px-6 print:py-0 print:px-0" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
       <div className="max-w-4xl mx-auto">
-
-        {/* Back link (hidden on done) */}
         {step !== 'done' && (
           <Link
             href="/pedido"
@@ -144,7 +165,6 @@ export default function CheckoutPage() {
           </Link>
         )}
 
-        {/* Progress stepper */}
         {step !== 'done' && (
           <div className="flex items-center gap-2 mb-10">
             {STEP_LABELS.map((label, i) => {
@@ -168,26 +188,13 @@ export default function CheckoutPage() {
                     </span>
                     <span
                       className="text-sm font-medium hidden sm:block"
-                      style={{
-                        color: active
-                          ? 'var(--color-on-surface)'
-                          : done
-                          ? 'var(--color-secondary)'
-                          : 'var(--color-on-surface-variant)',
-                      }}
+                      style={{ color: active ? 'var(--color-on-surface)' : done ? 'var(--color-secondary)' : 'var(--color-on-surface-variant)' }}
                     >
                       {label}
                     </span>
                   </div>
                   {i < STEP_LABELS.length - 1 && (
-                    <div
-                      className="flex-1 h-px ml-2"
-                      style={{
-                        backgroundColor: done
-                          ? 'var(--color-secondary)'
-                          : 'var(--color-outline-variant)',
-                      }}
-                    />
+                    <div className="flex-1 h-px ml-2" style={{ backgroundColor: done ? 'var(--color-secondary)' : 'var(--color-outline-variant)' }} />
                   )}
                 </div>
               )
@@ -195,186 +202,137 @@ export default function CheckoutPage() {
           </div>
         )}
 
+        {errorMsg && (
+          <div
+            className="mb-6 rounded-xl p-4 flex items-start gap-3 text-sm"
+            style={{ backgroundColor: 'var(--color-error-container)', color: 'var(--color-on-error-container)' }}
+          >
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            {errorMsg}
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-
-          {/* ── Main panel ── */}
-          <div className="flex-1 min-w-0">
-
+          <div className="flex-1 min-w-0 print:w-full">
             {/* ════ STEP: MODALIDAD ════ */}
             {step === 'mode' && (
-              <div
-                className="rounded-2xl p-6 shadow-ambient"
-                style={{ backgroundColor: 'var(--color-surface)' }}
-              >
-                <h2
-                  className="mb-1"
-                  style={{
-                    fontFamily: 'var(--font-newsreader)',
-                    fontSize: '1.5rem',
-                    fontWeight: 600,
-                  }}
-                >
+              <div className="rounded-2xl p-6 shadow-ambient" style={{ backgroundColor: 'var(--color-surface)' }}>
+                <h2 className="mb-1" style={{ fontFamily: 'var(--font-newsreader)', fontSize: '1.5rem', fontWeight: 600 }}>
                   ¿Cómo vas a consumir?
                 </h2>
-                <p
-                  className="text-sm mb-7"
-                  style={{ color: 'var(--color-on-surface-variant)' }}
-                >
+                <p className="text-sm mb-7" style={{ color: 'var(--color-on-surface-variant)' }}>
                   Elige la modalidad de consumo para continuar.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Salón */}
                   <button
                     onClick={() => setMode('salon')}
                     className="rounded-2xl p-6 text-left transition-all duration-200 focus:outline-none"
                     style={{
-                      border:
-                        mode === 'salon'
-                          ? '2px solid var(--color-primary)'
-                          : '2px solid var(--color-outline-variant)',
-                      backgroundColor:
-                        mode === 'salon'
-                          ? 'var(--color-primary-container)'
-                          : 'var(--color-surface-container-low)',
+                      border: mode === 'salon' ? '2px solid var(--color-primary)' : '2px solid var(--color-outline-variant)',
+                      backgroundColor: mode === 'salon' ? 'var(--color-primary-container)' : 'var(--color-surface-container-low)',
                       boxShadow: mode === 'salon' ? '0 0 0 3px rgba(130,59,24,0.10)' : 'none',
                     }}
                   >
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
                       style={{
-                        backgroundColor:
-                          mode === 'salon'
-                            ? 'var(--color-primary)'
-                            : 'var(--color-surface-container-high)',
-                        color:
-                          mode === 'salon'
-                            ? 'var(--color-on-primary)'
-                            : 'var(--color-on-surface-variant)',
+                        backgroundColor: mode === 'salon' ? 'var(--color-primary)' : 'var(--color-surface-container-high)',
+                        color: mode === 'salon' ? 'var(--color-on-primary)' : 'var(--color-on-surface-variant)',
                       }}
                     >
                       <Building2 size={22} />
                     </div>
-                    <p
-                      className="font-semibold mb-1"
-                      style={{
-                        color:
-                          mode === 'salon'
-                            ? 'var(--color-on-primary-container)'
-                            : 'var(--color-on-surface)',
-                      }}
-                    >
+                    <p className="font-semibold mb-1" style={{ color: mode === 'salon' ? 'var(--color-on-primary-container)' : 'var(--color-on-surface)' }}>
                       Consumir en Salón
                     </p>
-                    <p
-                      className="text-xs leading-relaxed"
-                      style={{ color: 'var(--color-on-surface-variant)' }}
-                    >
-                      Disfruta tu pedido en nuestras mesas. Pago en pasarela o en caja.
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                      Elige tu mesa y disfruta tu pedido en el restaurante.
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {['Pasarela web', 'Pago en caja'].map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                          style={{
-                            backgroundColor: 'var(--color-secondary-container)',
-                            color: 'var(--color-on-secondary-container)',
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
                   </button>
 
-                  {/* Takeaway */}
                   <button
-                    onClick={() => setMode('takeaway')}
+                    onClick={() => setMode('recojo')}
                     className="rounded-2xl p-6 text-left transition-all duration-200 focus:outline-none"
                     style={{
-                      border:
-                        mode === 'takeaway'
-                          ? '2px solid var(--color-primary)'
-                          : '2px solid var(--color-outline-variant)',
-                      backgroundColor:
-                        mode === 'takeaway'
-                          ? 'var(--color-primary-container)'
-                          : 'var(--color-surface-container-low)',
-                      boxShadow: mode === 'takeaway' ? '0 0 0 3px rgba(130,59,24,0.10)' : 'none',
+                      border: mode === 'recojo' ? '2px solid var(--color-primary)' : '2px solid var(--color-outline-variant)',
+                      backgroundColor: mode === 'recojo' ? 'var(--color-primary-container)' : 'var(--color-surface-container-low)',
+                      boxShadow: mode === 'recojo' ? '0 0 0 3px rgba(130,59,24,0.10)' : 'none',
                     }}
                   >
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
                       style={{
-                        backgroundColor:
-                          mode === 'takeaway'
-                            ? 'var(--color-primary)'
-                            : 'var(--color-surface-container-high)',
-                        color:
-                          mode === 'takeaway'
-                            ? 'var(--color-on-primary)'
-                            : 'var(--color-on-surface-variant)',
+                        backgroundColor: mode === 'recojo' ? 'var(--color-primary)' : 'var(--color-surface-container-high)',
+                        color: mode === 'recojo' ? 'var(--color-on-primary)' : 'var(--color-on-surface-variant)',
                       }}
                     >
                       <ShoppingBag size={22} />
                     </div>
-                    <p
-                      className="font-semibold mb-1"
-                      style={{
-                        color:
-                          mode === 'takeaway'
-                            ? 'var(--color-on-primary-container)'
-                            : 'var(--color-on-surface)',
-                      }}
-                    >
+                    <p className="font-semibold mb-1" style={{ color: mode === 'recojo' ? 'var(--color-on-primary-container)' : 'var(--color-on-surface)' }}>
                       Para Recoger
                     </p>
-                    <p
-                      className="text-xs leading-relaxed"
-                      style={{ color: 'var(--color-on-surface-variant)' }}
-                    >
-                      Retira tu pedido en el mostrador. Recibirás un código QR para validar la entrega.
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                      Retira tu pedido en el mostrador.
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {['Solo pasarela web', 'Genera QR'].map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                          style={{
-                            backgroundColor:
-                              tag === 'Genera QR'
-                                ? 'var(--color-primary-container)'
-                                : 'var(--color-secondary-container)',
-                            color:
-                              tag === 'Genera QR'
-                                ? 'var(--color-on-primary-container)'
-                                : 'var(--color-on-secondary-container)',
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
                   </button>
                 </div>
 
+                {/* Selector de mesa (salón) */}
+                {mode === 'salon' && (
+                  <div className="mt-6 rounded-xl p-5" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
+                    <p className="text-sm font-medium mb-3" style={{ color: 'var(--color-on-surface)' }}>
+                      Elige tu mesa
+                    </p>
+                    {cargandoMesas ? (
+                      <p className="text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Cargando mesas disponibles…
+                      </p>
+                    ) : mesas.length === 0 ? (
+                      <p className="text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        No hay mesas disponibles en este momento.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {mesas.map((m) => (
+                          <button
+                            key={m.id}
+                            onClick={() => setMesaId(m.id)}
+                            className="px-4 py-2 rounded-full text-sm font-medium transition-all"
+                            style={
+                              mesaId === m.id
+                                ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }
+                                : { backgroundColor: 'var(--color-surface)', color: 'var(--color-on-surface-variant)', border: '1.5px solid var(--color-outline-variant)' }
+                            }
+                          >
+                            Mesa {m.numero} · {m.capacidad}p
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
+                      Número de comensales
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={numComensales}
+                      onChange={(e) => setNumComensales(Math.max(1, Number(e.target.value)))}
+                      className="w-24 px-4 py-2 rounded-xl text-sm outline-none"
+                      style={{ backgroundColor: 'var(--color-surface)', border: '1.5px solid var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
+                    />
+                  </div>
+                )}
+
                 <div className="mt-8 flex justify-end">
                   <button
-                    disabled={!mode}
+                    disabled={!mode || (mode === 'salon' && !mesaId)}
                     onClick={() => setStep('payment')}
                     className="flex items-center gap-2 px-7 py-3 rounded-full text-sm font-semibold transition-all"
                     style={
-                      mode
-                        ? {
-                            backgroundColor: 'var(--color-primary)',
-                            color: 'var(--color-on-primary)',
-                          }
-                        : {
-                            backgroundColor: 'var(--color-surface-container-high)',
-                            color: 'var(--color-on-surface-variant)',
-                            cursor: 'not-allowed',
-                          }
+                      mode && !(mode === 'salon' && !mesaId)
+                        ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }
+                        : { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }
                     }
                   >
                     Continuar <ChevronRight size={16} />
@@ -385,175 +343,61 @@ export default function CheckoutPage() {
 
             {/* ════ STEP: MÉTODO DE PAGO ════ */}
             {step === 'payment' && (
-              <div
-                className="rounded-2xl p-6 shadow-ambient"
-                style={{ backgroundColor: 'var(--color-surface)' }}
-              >
+              <div className="rounded-2xl p-6 shadow-ambient" style={{ backgroundColor: 'var(--color-surface)' }}>
                 <div className="flex items-center gap-3 mb-1">
-                  <button
-                    onClick={() => setStep('mode')}
-                    className="p-1.5 rounded-full hover:opacity-70 transition-opacity"
-                    style={{ color: 'var(--color-on-surface-variant)' }}
-                  >
+                  <button onClick={() => setStep('mode')} className="p-1.5 rounded-full hover:opacity-70 transition-opacity" style={{ color: 'var(--color-on-surface-variant)' }}>
                     <ArrowLeft size={18} />
                   </button>
-                  <h2
-                    style={{
-                      fontFamily: 'var(--font-newsreader)',
-                      fontSize: '1.5rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Método de pago
-                  </h2>
+                  <h2 style={{ fontFamily: 'var(--font-newsreader)', fontSize: '1.5rem', fontWeight: 600 }}>Método de pago</h2>
                 </div>
 
-                <p
-                  className="text-sm mb-7 pl-9"
-                  style={{ color: 'var(--color-on-surface-variant)' }}
-                >
+                <p className="text-sm mb-7 pl-9" style={{ color: 'var(--color-on-surface-variant)' }}>
                   Modalidad:{' '}
-                  <strong style={{ color: 'var(--color-on-surface)' }}>
-                    {mode === 'salon' ? 'Consumir en Salón' : 'Para Recoger (Takeaway)'}
-                  </strong>
+                  <strong style={{ color: 'var(--color-on-surface)' }}>{mode === 'salon' ? 'Consumir en Salón' : 'Para Recoger'}</strong>
                 </p>
 
                 <div className="flex flex-col gap-4">
-                  {/* Pasarela web — siempre disponible */}
                   <button
                     onClick={() => {
-                      setPayment('gateway')
+                      setPayment('tarjeta')
                       setStep('card')
                     }}
-                    className="flex items-center gap-4 p-5 rounded-2xl text-left transition-all duration-200 group"
-                    style={{
-                      border: '2px solid var(--color-outline-variant)',
-                      backgroundColor: 'var(--color-surface-container-low)',
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor = 'var(--color-primary)')
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor = 'var(--color-outline-variant)')
-                    }
+                    disabled={processing}
+                    className="flex items-center gap-4 p-5 rounded-2xl text-left transition-all duration-200"
+                    style={{ border: '2px solid var(--color-outline-variant)', backgroundColor: 'var(--color-surface-container-low)' }}
                   >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: 'var(--color-primary-container)',
-                        color: 'var(--color-primary)',
-                      }}
-                    >
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--color-primary-container)', color: 'var(--color-primary)' }}>
                       <CreditCard size={20} />
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold text-sm mb-0.5">Pasarela de pagos</p>
-                      <p
-                        className="text-xs"
-                        style={{ color: 'var(--color-on-surface-variant)' }}
-                      >
-                        Tarjeta de crédito o débito — pago seguro en línea
+                      <p className="font-semibold text-sm mb-0.5">Pagar en línea</p>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Tarjeta de crédito o débito — recibirás un comprobante
                       </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {['visa', 'mc', 'amex'].map((b) => (
-                        <div
-                          key={b}
-                          className="w-9 h-6 rounded flex items-center justify-center text-[9px] font-bold"
-                          style={{
-                            backgroundColor: 'var(--color-surface-container-high)',
-                            color: 'var(--color-on-surface-variant)',
-                          }}
-                        >
-                          {b === 'visa' ? 'VISA' : b === 'mc' ? 'MC' : 'AMEX'}
-                        </div>
-                      ))}
                     </div>
                   </button>
 
-                  {/* Pago presencial — disponibilidad delegada a checkoutService */}
-                  {esPresencialDisponible(mode!) ? (
-                    <button
-                      onClick={() => {
-                        setPayment('presencial')
-                        handlePresencial()
-                      }}
-                      className="flex items-center gap-4 p-5 rounded-2xl text-left transition-all duration-200"
-                      style={{
-                        border: '2px solid var(--color-outline-variant)',
-                        backgroundColor: 'var(--color-surface-container-low)',
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.borderColor = 'var(--color-secondary)')
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.borderColor = 'var(--color-outline-variant)')
-                      }
-                    >
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-                        style={{
-                          backgroundColor: 'var(--color-secondary-container)',
-                          color: 'var(--color-secondary)',
-                        }}
-                      >
-                        <MapPin size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm mb-0.5">Pago presencial en el local</p>
-                        <p
-                          className="text-xs"
-                          style={{ color: 'var(--color-on-surface-variant)' }}
-                        >
-                          Paga en caja al momento de retirar tu pedido
-                        </p>
-                      </div>
-                    </button>
-                  ) : (
-                    /* Deshabilitado para Takeaway */
-                    <div
-                      className="flex items-center gap-4 p-5 rounded-2xl select-none"
-                      style={{
-                        border: '2px dashed var(--color-outline-variant)',
-                        backgroundColor: 'var(--color-surface-container-lowest)',
-                        opacity: 0.45,
-                        cursor: 'not-allowed',
-                      }}
-                    >
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-                        style={{
-                          backgroundColor: 'var(--color-surface-container-high)',
-                          color: 'var(--color-on-surface-variant)',
-                        }}
-                      >
-                        <MapPin size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm mb-0.5 flex items-center gap-2">
-                          Pago presencial en el local
-                          <span
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: 'var(--color-error-container)',
-                              color: 'var(--color-on-error-container)',
-                            }}
-                          >
-                            No disponible para Takeaway
-                          </span>
-                        </p>
-                        <p
-                          className="text-xs"
-                          style={{ color: 'var(--color-on-surface-variant)' }}
-                        >
-                          El pago presencial solo aplica para consumo en salón
-                        </p>
-                      </div>
+                  <button
+                    onClick={() => {
+                      setPayment('efectivo')
+                      finalizarPedido('efectivo')
+                    }}
+                    disabled={processing}
+                    className="flex items-center gap-4 p-5 rounded-2xl text-left transition-all duration-200"
+                    style={{ border: '2px solid var(--color-outline-variant)', backgroundColor: 'var(--color-surface-container-low)' }}
+                  >
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--color-secondary-container)', color: 'var(--color-secondary)' }}>
+                      {processing && payment === 'efectivo' ? <Loader2 size={20} className="animate-spin" /> : <Banknote size={20} />}
                     </div>
-                  )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm mb-0.5">Pago en local</p>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Genera un código QR y paga al recoger o en tu mesa
+                      </p>
+                    </div>
+                  </button>
                 </div>
 
-                {/* Security note */}
                 <div className="mt-6 flex items-center gap-2">
                   <Lock size={13} style={{ color: 'var(--color-secondary)' }} />
                   <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
@@ -565,52 +409,25 @@ export default function CheckoutPage() {
 
             {/* ════ STEP: PASARELA (formulario de tarjeta) ════ */}
             {step === 'card' && (
-              <div
-                className="rounded-2xl p-6 shadow-ambient"
-                style={{ backgroundColor: 'var(--color-surface)' }}
-              >
+              <div className="rounded-2xl p-6 shadow-ambient" style={{ backgroundColor: 'var(--color-surface)' }}>
                 <div className="flex items-center gap-3 mb-6">
-                  <button
-                    onClick={() => setStep('payment')}
-                    className="p-1.5 rounded-full hover:opacity-70 transition-opacity"
-                    style={{ color: 'var(--color-on-surface-variant)' }}
-                  >
+                  <button onClick={() => setStep('payment')} className="p-1.5 rounded-full hover:opacity-70 transition-opacity" style={{ color: 'var(--color-on-surface-variant)' }}>
                     <ArrowLeft size={18} />
                   </button>
-                  <h2
-                    style={{
-                      fontFamily: 'var(--font-newsreader)',
-                      fontSize: '1.5rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Datos de pago
-                  </h2>
+                  <h2 style={{ fontFamily: 'var(--font-newsreader)', fontSize: '1.5rem', fontWeight: 600 }}>Datos de pago</h2>
                 </div>
 
-                {/* Card preview */}
                 <div
                   className="relative rounded-2xl p-6 mb-8 overflow-hidden"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, var(--color-primary) 0%, #5c2910 100%)',
-                    minHeight: 160,
-                  }}
+                  style={{ background: 'linear-gradient(135deg, var(--color-primary) 0%, #5c2910 100%)', minHeight: 160 }}
                 >
-                  <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10 -translate-y-1/2 translate-x-1/2"
-                    style={{ backgroundColor: 'white' }} />
-                  <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full opacity-10 translate-y-1/2 -translate-x-1/2"
-                    style={{ backgroundColor: 'white' }} />
+                  <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10 -translate-y-1/2 translate-x-1/2" style={{ backgroundColor: 'white' }} />
+                  <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full opacity-10 translate-y-1/2 -translate-x-1/2" style={{ backgroundColor: 'white' }} />
                   <p className="text-[10px] uppercase tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.60)' }}>
                     Comida al Paso · Pasarela Segura
                   </p>
-                  <p
-                    className="text-xl font-mono tracking-widest mb-4"
-                    style={{ color: cardNum ? 'white' : 'rgba(255,255,255,0.35)' }}
-                  >
-                    {cardNum
-                      ? cardNum.padEnd(19, ' ').replace(/ /g, ' ')
-                      : '•••• •••• •••• ••••'}
+                  <p className="text-xl font-mono tracking-widest mb-4" style={{ color: cardNum ? 'white' : 'rgba(255,255,255,0.35)' }}>
+                    {cardNum || '•••• •••• •••• ••••'}
                   </p>
                   <div className="flex justify-between items-end">
                     <div>
@@ -632,14 +449,9 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Form */}
                 <div className="flex flex-col gap-4">
-                  {/* Card number */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: 'var(--color-on-surface)' }}
-                    >
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
                       Número de tarjeta
                     </label>
                     <input
@@ -649,22 +461,12 @@ export default function CheckoutPage() {
                       value={cardNum}
                       onChange={(e) => setCardNum(formatearNumeroTarjeta(e.target.value))}
                       className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono tracking-wider"
-                      style={{
-                        backgroundColor: 'var(--color-surface-container-low)',
-                        color: 'var(--color-on-surface)',
-                        border: '1.5px solid var(--color-outline-variant)',
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                      onBlur={(e) => (e.target.style.borderColor = 'var(--color-outline-variant)')}
+                      style={{ backgroundColor: 'var(--color-surface-container-low)', color: 'var(--color-on-surface)', border: '1.5px solid var(--color-outline-variant)' }}
                     />
                   </div>
 
-                  {/* Cardholder */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: 'var(--color-on-surface)' }}
-                    >
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
                       Nombre del titular
                     </label>
                     <input
@@ -673,23 +475,13 @@ export default function CheckoutPage() {
                       value={cardName}
                       onChange={(e) => setCardName(e.target.value.toUpperCase())}
                       className="w-full px-4 py-3 rounded-xl text-sm outline-none uppercase tracking-wide"
-                      style={{
-                        backgroundColor: 'var(--color-surface-container-low)',
-                        color: 'var(--color-on-surface)',
-                        border: '1.5px solid var(--color-outline-variant)',
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                      onBlur={(e) => (e.target.style.borderColor = 'var(--color-outline-variant)')}
+                      style={{ backgroundColor: 'var(--color-surface-container-low)', color: 'var(--color-on-surface)', border: '1.5px solid var(--color-outline-variant)' }}
                     />
                   </div>
 
-                  {/* Expiry + CVV */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: 'var(--color-on-surface)' }}
-                      >
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
                         Vencimiento
                       </label>
                       <input
@@ -699,20 +491,11 @@ export default function CheckoutPage() {
                         value={expiry}
                         onChange={(e) => setExpiry(formatearExpiry(e.target.value))}
                         className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono"
-                        style={{
-                          backgroundColor: 'var(--color-surface-container-low)',
-                          color: 'var(--color-on-surface)',
-                          border: '1.5px solid var(--color-outline-variant)',
-                        }}
-                        onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                        onBlur={(e) => (e.target.style.borderColor = 'var(--color-outline-variant)')}
+                        style={{ backgroundColor: 'var(--color-surface-container-low)', color: 'var(--color-on-surface)', border: '1.5px solid var(--color-outline-variant)' }}
                       />
                     </div>
                     <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: 'var(--color-on-surface)' }}
-                      >
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
                         CVV
                       </label>
                       <input
@@ -723,34 +506,19 @@ export default function CheckoutPage() {
                         value={cvv}
                         onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono"
-                        style={{
-                          backgroundColor: 'var(--color-surface-container-low)',
-                          color: 'var(--color-on-surface)',
-                          border: '1.5px solid var(--color-outline-variant)',
-                        }}
-                        onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                        onBlur={(e) => (e.target.style.borderColor = 'var(--color-outline-variant)')}
+                        style={{ backgroundColor: 'var(--color-surface-container-low)', color: 'var(--color-on-surface)', border: '1.5px solid var(--color-outline-variant)' }}
                       />
                     </div>
                   </div>
 
-                  {/* Pay button */}
                   <button
-                    onClick={handleWebPayment}
-                    // Validación delegada a checkoutService (MVC + SOLID-S)
+                    onClick={handlePagoTarjeta}
                     disabled={processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)}
                     className="w-full py-3.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 mt-2 transition-opacity"
                     style={
                       processing || !tarjetaCompleta(cardNum, cardName, expiry, cvv)
-                        ? {
-                            backgroundColor: 'var(--color-surface-container-high)',
-                            color: 'var(--color-on-surface-variant)',
-                            cursor: 'not-allowed',
-                          }
-                        : {
-                            backgroundColor: 'var(--color-primary)',
-                            color: 'var(--color-on-primary)',
-                          }
+                        ? { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }
+                        : { backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }
                     }
                   >
                     {processing ? (
@@ -763,140 +531,107 @@ export default function CheckoutPage() {
                       </>
                     )}
                   </button>
-
-                  <p className="text-center text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    <Lock size={11} className="inline mr-1" />
-                    Pago procesado por pasarela segura · TLS 256-bit
-                  </p>
                 </div>
               </div>
             )}
 
             {/* ════ STEP: CONFIRMACIÓN ════ */}
-            {step === 'done' && (
-              <div
-                className="rounded-2xl p-8 shadow-ambient text-center"
-                style={{ backgroundColor: 'var(--color-surface)' }}
-              >
-                {/* Success icon */}
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-                  style={{
-                    backgroundColor: 'var(--color-secondary-container)',
-                    color: 'var(--color-secondary)',
-                  }}
-                >
+            {step === 'done' && order && (
+              <div className="rounded-2xl p-8 shadow-ambient text-center print:shadow-none" style={{ backgroundColor: 'var(--color-surface)' }} id="comprobante">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 print:hidden" style={{ backgroundColor: 'var(--color-secondary-container)', color: 'var(--color-secondary)' }}>
                   <Check size={32} />
                 </div>
 
-                <h2
-                  className="mb-1"
-                  style={{
-                    fontFamily: 'var(--font-newsreader)',
-                    fontSize: '1.75rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  {payment === 'presencial'
-                    ? '¡Pedido registrado!'
-                    : '¡Pago confirmado!'}
+                <h2 className="mb-1" style={{ fontFamily: 'var(--font-newsreader)', fontSize: '1.75rem', fontWeight: 600 }}>
+                  {order.metodo === 'efectivo' ? '¡Pedido registrado!' : '¡Pago confirmado!'}
                 </h2>
 
-                <p
-                  className="text-sm mb-2"
-                  style={{ color: 'var(--color-on-surface-variant)' }}
-                >
-                  {payment === 'presencial'
-                    ? 'Dirígete a la caja para realizar el pago y retirar tu pedido.'
-                    : mode === 'takeaway'
-                    ? 'Muestra el código QR en el mostrador para retirar tu pedido.'
-                    : 'Tu pago fue procesado exitosamente. Espera tu pedido en mesa.'}
+                <p className="text-sm mb-2" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  {order.metodo === 'efectivo'
+                    ? 'Muestra el código QR para pagar y recoger tu pedido.'
+                    : 'Tu pago fue procesado. Guarda tu comprobante.'}
                 </p>
 
-                {/* Order ID badge */}
+                {totalDifiere && (
+                  <p className="text-xs mt-2 mb-2" style={{ color: 'var(--color-error)' }}>
+                    El total puede variar respecto al carrito según los complementos elegidos — el monto mostrado es el confirmado.
+                  </p>
+                )}
+
                 <div
                   className="inline-block px-5 py-2 rounded-full text-sm font-mono font-semibold mt-4 mb-8"
-                  style={{
-                    backgroundColor: 'var(--color-primary-container)',
-                    color: 'var(--color-on-primary-container)',
-                  }}
+                  style={{ backgroundColor: 'var(--color-primary-container)', color: 'var(--color-on-primary-container)' }}
                 >
-                  Pedido # {orderId}
+                  Pedido #{order.id.slice(0, 8).toUpperCase()}
                 </div>
 
-                {/* QR Code — condición delegada a checkoutService */}
-                {requiereQR(mode!, payment!) && qrDataUrl && (
+                {order.metodo === 'efectivo' && qrDataUrl && (
                   <div className="mb-8">
-                    <div
-                      className="inline-block p-4 rounded-2xl shadow-ambient"
-                      style={{ backgroundColor: 'var(--color-surface-container-low)' }}
-                    >
+                    <div className="inline-block p-4 rounded-2xl shadow-ambient" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={qrDataUrl}
-                        alt={`QR Pedido ${orderId}`}
-                        width={240}
-                        height={240}
-                        className="rounded-xl"
-                      />
+                      <img src={qrDataUrl} alt={`QR Pedido ${order.id}`} width={240} height={240} className="rounded-xl" />
                     </div>
-                    <p
-                      className="text-xs mt-3"
-                      style={{ color: 'var(--color-on-surface-variant)' }}
-                    >
-                      Válido por 1 hora · Muéstralo al retirar tu pedido
+                    <p className="text-xs mt-3 flex items-center justify-center gap-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                      <QrCode size={12} /> Muéstralo al pagar y retirar tu pedido
                     </p>
                   </div>
                 )}
 
-                {/* Mode info */}
-                <div
-                  className="rounded-xl p-4 mb-8 text-sm text-left mx-auto max-w-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-low)' }}
-                >
+                {order.metodo === 'tarjeta' && (
+                  <div className="rounded-xl p-5 mb-8 text-left mx-auto max-w-sm text-sm" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
+                    <p className="font-semibold mb-3" style={{ color: 'var(--color-on-surface)' }}>
+                      Comprobante de pago
+                    </p>
+                    <div className="flex justify-between py-1">
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Fecha</span>
+                      <span>{new Date(order.createdAt).toLocaleString('es-PE')}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Método</span>
+                      <span>Tarjeta •••• {order.referenciaExterna}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Ítems</span>
+                      <span>{order.items.length}</span>
+                    </div>
+                    <div className="flex justify-between py-2 mt-1 font-bold" style={{ borderTop: '1px solid var(--color-outline-variant)', color: 'var(--color-primary)' }}>
+                      <span>Total</span>
+                      <span>S/{order.total.toLocaleString('es-PE')}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-xl p-4 mb-8 text-sm text-left mx-auto max-w-xs" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
                   <div className="flex items-start gap-3">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: 'var(--color-secondary-container)',
-                        color: 'var(--color-secondary)',
-                      }}
-                    >
-                      {mode === 'salon' ? <Building2 size={16} /> : <ShoppingBag size={16} />}
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--color-secondary-container)', color: 'var(--color-secondary)' }}>
+                      {order.modo === 'salon' ? <Building2 size={16} /> : <ShoppingBag size={16} />}
                     </div>
                     <div>
                       <p className="font-semibold mb-0.5" style={{ color: 'var(--color-on-surface)' }}>
-                        {mode === 'salon' ? 'Consumo en salón' : 'Para recoger (Takeaway)'}
+                        {order.modo === 'salon' ? 'Consumo en salón' : 'Para recoger'}
                       </p>
-                      <p style={{ color: 'var(--color-on-surface-variant)' }}>
-                        {mode === 'salon'
-                          ? payment === 'presencial'
-                            ? 'Pago: en caja al retirar'
-                            : 'Pago: procesado en línea'
-                          : 'Pago: procesado en línea'}
-                      </p>
+                      <p style={{ color: 'var(--color-on-surface-variant)' }}>Total: S/{order.total.toLocaleString('es-PE')}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Link
-                    href="/"
-                    className="px-7 py-3 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
-                    style={{
-                      backgroundColor: 'var(--color-primary)',
-                      color: 'var(--color-on-primary)',
-                    }}
-                  >
-                    Volver al inicio
+                <div className="flex flex-col sm:flex-row gap-3 justify-center print:hidden">
+                  {order.metodo === 'tarjeta' && (
+                    <button
+                      onClick={() => window.print()}
+                      className="px-7 py-3 rounded-full text-sm font-semibold border-2 hover:bg-[var(--color-surface-container)] transition-colors inline-flex items-center gap-2 justify-center"
+                      style={{ borderColor: 'var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
+                    >
+                      <Printer size={15} /> Imprimir / Guardar
+                    </button>
+                  )}
+                  <Link href="/perfil/pedidos" className="px-7 py-3 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }}>
+                    Ver mis pedidos
                   </Link>
                   <Link
                     href="/menus"
                     className="px-7 py-3 rounded-full text-sm font-medium border-2 hover:bg-[var(--color-surface-container)] transition-colors"
-                    style={{
-                      borderColor: 'var(--color-outline-variant)',
-                      color: 'var(--color-on-surface)',
-                    }}
+                    style={{ borderColor: 'var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
                   >
                     Ver más menús
                   </Link>
@@ -907,18 +642,8 @@ export default function CheckoutPage() {
 
           {/* ── Order summary sidebar ── */}
           {step !== 'done' && (
-            <aside
-              className="lg:w-72 w-full rounded-2xl p-5 shadow-ambient lg:sticky lg:top-24"
-              style={{ backgroundColor: 'var(--color-surface)' }}
-            >
-              <h3
-                className="mb-4"
-                style={{
-                  fontFamily: 'var(--font-newsreader)',
-                  fontSize: '1.15rem',
-                  fontWeight: 500,
-                }}
-              >
+            <aside className="lg:w-72 w-full rounded-2xl p-5 shadow-ambient lg:sticky lg:top-24" style={{ backgroundColor: 'var(--color-surface)' }}>
+              <h3 className="mb-4" style={{ fontFamily: 'var(--font-newsreader)', fontSize: '1.15rem', fontWeight: 500 }}>
                 Resumen del pedido
               </h3>
 
@@ -930,70 +655,36 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium leading-snug truncate">{item.name}</p>
-                      <p
-                        className="text-xs"
-                        style={{ color: 'var(--color-on-surface-variant)' }}
-                      >
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
                         ×{item.quantity}
                       </p>
                     </div>
-                    <p
-                      className="text-sm font-semibold shrink-0"
-                      style={{ color: 'var(--color-primary)' }}
-                    >
+                    <p className="text-sm font-semibold shrink-0" style={{ color: 'var(--color-primary)' }}>
                       S/{(item.price * item.quantity).toLocaleString('es-PE')}
                     </p>
                   </li>
                 ))}
               </ul>
 
-              <div
-                className="pt-4"
-                style={{ borderTop: '1px solid var(--color-outline-variant)' }}
-              >
+              <div className="pt-4" style={{ borderTop: '1px solid var(--color-outline-variant)' }}>
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Subtotal ({cartCount} ítem{cartCount !== 1 ? 's' : ''})
                   </span>
                   <span className="text-sm font-semibold">S/{cartTotal.toLocaleString('es-PE')}</span>
                 </div>
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Servicio
-                  </span>
-                  <span
-                    className="text-xs font-medium px-2 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: 'var(--color-secondary-container)',
-                      color: 'var(--color-on-secondary-container)',
-                    }}
-                  >
-                    Gratis
-                  </span>
-                </div>
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total</span>
-                  <span
-                    className="text-xl font-bold"
-                    style={{ color: 'var(--color-primary)' }}
-                  >
+                  <span className="text-xl font-bold" style={{ color: 'var(--color-primary)' }}>
                     S/{cartTotal.toLocaleString('es-PE')}
                   </span>
                 </div>
               </div>
 
               {mode && (
-                <div
-                  className="mt-4 pt-4 flex items-center gap-2 text-xs"
-                  style={{
-                    borderTop: '1px solid var(--color-outline-variant)',
-                    color: 'var(--color-on-surface-variant)',
-                  }}
-                >
+                <div className="mt-4 pt-4 flex items-center gap-2 text-xs" style={{ borderTop: '1px solid var(--color-outline-variant)', color: 'var(--color-on-surface-variant)' }}>
                   {mode === 'salon' ? <Building2 size={13} /> : <ShoppingBag size={13} />}
-                  <span>
-                    {mode === 'salon' ? 'Consumir en salón' : 'Para recoger'}
-                  </span>
+                  <span>{mode === 'salon' ? 'Consumir en salón' : 'Para recoger'}</span>
                 </div>
               )}
             </aside>

@@ -12,15 +12,15 @@ Sirve a las 3 apps frontend del monorepo: `apps/web` (port 3000), `apps/admin` (
 |---|---|
 | Java | 21 |
 | SQL Server | 2019+ (local o SQLEXPRESS) |
-| Docker Desktop | cualquiera — solo para tests con Testcontainers |
+| Docker Desktop | cualquiera — solo para tests con Testcontainers (no implementado aún) |
 
-La BD debe existir: `bdAppcomida`. Crea el usuario de aplicación con `sql_usuario.sql`.
+La BD debe existir: `bdAppcomida`, con el esquema, stored procedures y datos de ejemplo de `../scriptsbd/` cargados (`sql_tablas.sql` → `procedures_completo.sql` → `insert_restaurantecompleto.sql` + `menu_comidas_menu.sql` → `migracion_estado_cancelado.sql`).
 
 ---
 
 ## Configuración
 
-### Variable de entorno JWT (una vez por sesión PowerShell)
+### Variable de entorno JWT (una vez por sesión)
 
 ```powershell
 $env:JWT_SECRET = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
@@ -38,22 +38,17 @@ jwt.expiration-ms=86400000
 cors.allowed-origins=http://localhost:3000,http://localhost:3001,http://localhost:3002
 ```
 
+Credenciales reales de desarrollo (BD local) no van en este archivo — usa `application-local.properties` (untracked) o pregunta al equipo.
+
 ---
 
 ## Comandos
 
 ```powershell
-# Arrancar en :8080
-.\mvnw spring-boot:run
-
-# Ejecutar tests (requiere Docker)
-.\mvnw test
-
-# Solo compilar (sin tests)
-.\mvnw -q compile
-
-# Build del JAR
-.\mvnw clean package -DskipTests
+.\mvnw spring-boot:run          # Arrancar en :8080
+.\mvnw test                     # Ejecutar tests (36, sin Docker)
+.\mvnw -q compile               # Solo compilar
+.\mvnw clean package -DskipTests # Build del JAR
 ```
 
 ### Verificación rápida
@@ -76,28 +71,34 @@ business/       ← Services (interface + impl), solo lógica de negocio
     ↓
 adapter/        ← DAOs que invocan Stored Procedures (EntityManager)
     ↓
-SQL Server      ← Stored Procedures para toda la persistencia
+SQL Server      ← 43 Stored Procedures para toda la persistencia
 ```
 
-`shared/` es transversal: `config/` (Security, CORS, OpenAPI), `security/` (JWT filter), `exception/` (handler global).
+`shared/` es transversal: `config/` (Security, CORS, OpenAPI), `security/` (JWT filter, 401 entry point), `exception/` (handler global).
 
 Dirección de dependencias: `resource → business → adapter`. Ninguna capa conoce a la capa superior.
-
-Patrones: **arquitectura en capas · DAO · SOLID · TDD**.
 
 ---
 
 ## Autenticación
 
-Todas las rutas protegidas requieren el header:
+Rutas protegidas requieren:
 
 ```
 Authorization: Bearer <token>
 ```
 
-El token se obtiene en `/api/auth/login` o `/api/auth/register`. Expira en **24 horas**.
+Token obtenido en `/api/auth/login` o `/api/auth/register`. Expira en **24 horas**.
 
-Roles disponibles: `ADMIN`, `RESTAURANTE`, `CLIENTE`, `REPARTIDOR`.
+Roles (BD, minúscula): `cliente` · `admin` · `restaurante` · `repartidor`.
+
+**Endpoints públicos** (sin token): `POST /api/auth/register`, `POST /api/auth/login`, y el catálogo de lectura — `GET /api/menu/categorias`, `GET /api/menu/items`, `GET /api/menu/items/{id}/componentes`, `GET /api/menu/items/{id}/arma-plato`, `GET /api/restaurantes`, `GET /api/restaurantes/{id}/elegir`. Todo lo demás requiere JWT válido.
+
+Token ausente/inválido/expirado en un endpoint protegido → **401** con body uniforme:
+
+```json
+{ "timestamp": "...", "status": 401, "error": "NO_AUTORIZADO", "message": "Token ausente, inválido o expirado", "path": "/api/pedidos/cliente" }
+```
 
 ---
 
@@ -108,6 +109,7 @@ Roles disponibles: `ADMIN`, `RESTAURANTE`, `CLIENTE`, `REPARTIDOR`.
 | 200 | GET, POST, PUT exitosos |
 | 202 | Operaciones de cambio de estado (toggle, cambiar estado, asignar) |
 | 400 | Validación fallida, credenciales inválidas, regla de negocio violada |
+| 401 | Sin token / token inválido o expirado |
 | 404 | Recurso no encontrado |
 | 409 | Conflicto (recurso duplicado) |
 | 500 | Error inesperado del servidor |
@@ -117,7 +119,7 @@ Roles disponibles: `ADMIN`, `RESTAURANTE`, `CLIENTE`, `REPARTIDOR`.
 
 ```json
 {
-  "timestamp": "2025-06-11T14:00:00+00:00",
+  "timestamp": "2026-07-08T14:00:00+00:00",
   "status": 400,
   "error": "INVALID_CREDENTIALS",
   "message": "Email o contraseña incorrectos",
@@ -128,7 +130,7 @@ Roles disponibles: `ADMIN`, `RESTAURANTE`, `CLIENTE`, `REPARTIDOR`.
 }
 ```
 
-Valores del campo `error`: `VALIDATION_ERROR` · `INVALID_CREDENTIALS` · `DUPLICATE_EMAIL` · `USER_INACTIVE` · `UNAUTHORIZED` · `FORBIDDEN` · `BAD_REQUEST` · `BUSINESS_RULE` · `NOT_FOUND` · `CONFLICT` · `INTERNAL_ERROR` · `DB_TIMEOUT`
+Valores del campo `error`: `VALIDATION_ERROR` · `DUPLICATE_EMAIL` · `INVALID_CREDENTIALS` · `USER_INACTIVE` · `NO_AUTORIZADO` · `FORBIDDEN` · `BAD_REQUEST` · `BUSINESS_RULE` · `CONFLICT` · `NOT_FOUND` · `DB_TIMEOUT` · `INTERNAL_ERROR`
 
 ---
 
@@ -136,7 +138,9 @@ Valores del campo `error`: `VALIDATION_ERROR` · `INVALID_CREDENTIALS` · `DUPLI
 
 ### Auth — `/api/auth`
 
-#### POST `/api/auth/register` — Registrar usuario
+#### POST `/api/auth/register` — Registrar usuario _(público)_
+
+El campo `rol` es libre (curso) — no valida que solo admins puedan crear otros admins.
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
@@ -146,748 +150,230 @@ curl -X POST http://localhost:8080/api/auth/register \
     "apellido": "López",
     "email": "maria@example.com",
     "password": "Segura123!",
-    "rol": "CLIENTE"
+    "rol": "cliente"
   }'
 ```
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "token": "eyJhbGciOiJIUzM4NCJ9...",
   "expiresIn": 86400000,
-  "usuario": {
-    "id": "a1b2c3d4-...",
-    "nombre": "María",
-    "apellido": "López",
-    "email": "maria@example.com",
-    "rol": "CLIENTE",
-    "activo": true
-  }
+  "usuario": { "id": "a1b2c3d4-...", "nombre": "María", "apellido": "López", "email": "maria@example.com", "rol": "cliente", "activo": true, "createdAt": "2026-07-08" }
 }
 ```
 
----
-
-#### POST `/api/auth/login` — Iniciar sesión
+#### POST `/api/auth/login` — Iniciar sesión _(público)_
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "maria@example.com",
-    "password": "Segura123!"
-  }'
+  -d '{ "email": "maria@example.com", "password": "Segura123!" }'
 ```
 
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "expiresIn": 86400000,
-  "usuario": {
-    "id": "a1b2c3d4-...",
-    "nombre": "María",
-    "apellido": "López",
-    "email": "maria@example.com",
-    "rol": "CLIENTE",
-    "activo": true
-  }
-}
-```
+Misma forma de respuesta que `register`.
 
----
-
-#### POST `/api/auth/refresh` — Renovar token
+#### POST `/api/auth/refresh` — Renovar token _(autenticado)_
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/refresh \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+curl -X POST http://localhost:8080/api/auth/refresh -H "Authorization: Bearer <token>"
 ```
 
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9...nuevo...",
-  "expiresIn": 86400000,
-  "usuario": { "id": "a1b2c3d4-...", "email": "maria@example.com", "rol": "CLIENTE" }
-}
-```
-
----
-
-#### GET `/api/auth/me` — Usuario autenticado
+#### GET `/api/auth/me` — Usuario autenticado _(autenticado)_
 
 ```bash
-curl http://localhost:8080/api/auth/me \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
-```
-
-```json
-{
-  "id": "a1b2c3d4-...",
-  "nombre": "María",
-  "apellido": "López",
-  "email": "maria@example.com",
-  "rol": "CLIENTE",
-  "activo": true
-}
+curl http://localhost:8080/api/auth/me -H "Authorization: Bearer <token>"
 ```
 
 ---
 
 ### Usuarios — `/api/usuarios`
 
-#### GET `/api/usuarios` — Listar usuarios _(admin)_
-
-```bash
-curl "http://localhost:8080/api/usuarios?rol=CLIENTE" \
-  -H "Authorization: Bearer <token-admin>"
-```
-
-```json
-[
-  { "id": "a1b2c3d4-...", "nombre": "María", "apellido": "López", "email": "maria@example.com", "rol": "CLIENTE", "activo": true },
-  { "id": "b2c3d4e5-...", "nombre": "Carlos", "apellido": "Ruiz", "email": "carlos@example.com", "rol": "CLIENTE", "activo": true }
-]
-```
-
----
-
-#### GET `/api/usuarios/{id}` — Obtener usuario _(admin o el propio usuario)_
-
-```bash
-curl http://localhost:8080/api/usuarios/a1b2c3d4-1234-5678-abcd-ef0123456789 \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{
-  "id": "a1b2c3d4-1234-5678-abcd-ef0123456789",
-  "nombre": "María",
-  "apellido": "López",
-  "email": "maria@example.com",
-  "rol": "CLIENTE",
-  "activo": true
-}
-```
-
----
-
-#### PUT `/api/usuarios/{id}` — Actualizar usuario _(admin o el propio usuario)_
-
-```bash
-curl -X PUT http://localhost:8080/api/usuarios/a1b2c3d4-... \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nombre": "María José",
-    "apellido": "López Torres"
-  }'
-```
-
-```json
-{ "id": "a1b2c3d4-...", "nombre": "María José", "apellido": "López Torres", "email": "maria@example.com", "rol": "CLIENTE", "activo": true }
-```
-
----
-
-#### PUT `/api/usuarios/{id}/password` — Cambiar contraseña _(admin o el propio usuario)_
+| Método | Ruta | Auth |
+|---|---|---|
+| GET | `/api/usuarios?rol=cliente` | admin |
+| GET | `/api/usuarios/{id}` | admin o el propio usuario |
+| PUT | `/api/usuarios/{id}` | admin o el propio usuario |
+| PUT | `/api/usuarios/{id}/password` | admin (sin password actual) o el propio usuario (con password actual) |
+| PATCH | `/api/usuarios/{id}/toggle` | admin |
 
 ```bash
 curl -X PUT http://localhost:8080/api/usuarios/a1b2c3d4-.../password \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "passwordActual": "Segura123!",
-    "passwordNueva": "MasSegura456!"
-  }'
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### PATCH `/api/usuarios/{id}/toggle` — Activar / desactivar _(admin)_
-
-```bash
-curl -X PATCH http://localhost:8080/api/usuarios/a1b2c3d4-.../toggle \
-  -H "Authorization: Bearer <token-admin>" \
-  -H "Content-Type: application/json" \
-  -d '{ "activo": false }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "passwordActual": "Segura123!", "passwordNuevo": "MasSegura456!" }'
 ```
 
 ---
 
 ### Restaurantes — `/api/restaurantes`
 
-#### POST `/api/restaurantes` — Crear restaurante _(admin)_
+| Método | Ruta | Auth |
+|---|---|---|
+| POST | `/api/restaurantes` | admin |
+| GET | `/api/restaurantes?soloActivos=true` | público — el SP filtra a "solo el mío" si el token es rol `restaurante` |
+| GET | `/api/restaurantes/mio` | restaurante — resuelve el restaurante fijo del usuario logueado |
+| GET | `/api/restaurantes/{id}/elegir` | público — catálogo completo para pintar la carta |
+| PUT | `/api/restaurantes/{id}` | admin |
+| PATCH | `/api/restaurantes/{id}/toggle` | admin |
 
 ```bash
 curl -X POST http://localhost:8080/api/restaurantes \
-  -H "Authorization: Bearer <token-admin>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nombre": "Comida al Paso Miraflores",
-    "direccion": "Av. Larco 345, Miraflores",
-    "telefono": "987654321"
-  }'
+  -H "Authorization: Bearer <token-admin>" -H "Content-Type: application/json" \
+  -d '{ "usuarioId": "u1-...", "nombre": "Comida al Paso Miraflores", "direccion": "Av. Larco 345, Miraflores", "telefono": "987654321", "aceptaRecojo": true, "aceptaDelivery": true, "aceptaSalon": true }'
 ```
 
-```json
-{ "id": "c3d4e5f6-..." }
-```
+#### GET `/api/restaurantes/{id}/elegir` — carta completa
 
----
-
-#### GET `/api/restaurantes` — Listar restaurantes _(autenticado)_
-
-El SP filtra según el rol del token: `RESTAURANTE` solo ve su propio restaurante; `ADMIN`/`CLIENTE` ven todos.
-
-```bash
-curl "http://localhost:8080/api/restaurantes?soloActivos=true" \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  {
-    "id": "c3d4e5f6-...",
-    "nombre": "Comida al Paso Miraflores",
-    "direccion": "Av. Larco 345, Miraflores",
-    "telefono": "987654321",
-    "aceptaRecojo": true,
-    "aceptaDelivery": true,
-    "aceptaSalon": true,
-    "activo": true
-  }
-]
-```
-
----
-
-#### GET `/api/restaurantes/{id}/elegir` — Cargar restaurante completo para cliente _(cliente)_
-
-Endpoint pensado para alimentar la web de cliente. Devuelve en una sola llamada: datos del restaurante, catálogo de categorías activas en sus ítems, lista global de etiquetas, y todos los ítems enriquecidos (etiquetas, componentes de combo y opciones de arma-tu-plato).
-
-```bash
-curl http://localhost:8080/api/restaurantes/c3d4e5f6-.../elegir \
-  -H "Authorization: Bearer <token-cliente>"
-```
+Una sola llamada: datos del restaurante, categorías con ítems en este restaurante, catálogo global de etiquetas, y todos los ítems enriquecidos (etiquetas, componentes de menú compuesto, opciones de arma-tu-plato).
 
 ```json
 {
-  "restaurante": {
-    "id": "c3d4e5f6-...",
-    "nombre": "Comida al Paso Miraflores",
-    "direccion": "Av. Larco 345, Miraflores",
-    "telefono": "987654321",
-    "aceptaRecojo": true,
-    "aceptaDelivery": true,
-    "aceptaSalon": true,
-    "activo": true
-  },
-  "categorias": [
-    { "codigo": "A_LA_CARTA", "nombre": "A la carta", "descripcion": "...", "orden": 1 },
-    { "codigo": "MENUS",      "nombre": "Menús del día", "descripcion": "...", "orden": 2 }
-  ],
-  "etiquetas": [
-    { "codigo": "VEGANO",     "nombre": "Vegano",     "color": "#4caf50" },
-    { "codigo": "SIN_GLUTEN", "nombre": "Sin Gluten", "color": "#ff9800" }
-  ],
+  "restaurante": { "id": "c3d4e5f6-...", "nombre": "La Trattoria di Luigi", "direccion": "...", "telefono": "...", "aceptaRecojo": true, "aceptaDelivery": true, "aceptaSalon": true, "activo": true },
+  "categorias": [{ "id": "...", "codigo": "a_la_carta", "nombre": "A la carta", "descripcion": "...", "orden": 2 }],
+  "etiquetas": [{ "codigo": "vegano", "nombre": "Vegano", "color": "#639922" }],
   "items": [
     {
-      "id": "f6a7b8c9-...",
-      "nombre": "Lomo Saltado",
-      "descripcion": "Clásico peruano con papas fritas",
-      "precio": 28.00,
-      "categoria": "A la carta",
-      "disponible": true,
-      "esMenuCompuesto": 0,
-      "esArmaPlato": 0,
-      "imagenUrl": "/images/lomo-saltado.jpg",
-      "etiquetas": [
-        { "codigo": "SIN_GLUTEN", "nombre": "Sin Gluten", "color": "#ff9800" }
-      ],
-      "componentes": [],
-      "opcionesArmaPlato": []
+      "id": "f6a7b8c9-...", "nombre": "Ceviche clásico", "categoria": "A la carta", "descripcion": "...",
+      "precio": 45.00, "pesoGramos": 380, "esMenuCompuesto": false, "esArmaPlato": false, "disponible": true,
+      "imagenUrl": null, "etiquetas": [{ "codigo": "marino", "nombre": "Marino", "color": "#185FA5" }],
+      "componentes": [], "opcionesArmaPlato": []
     },
     {
-      "id": "a1b2c3d4-...",
-      "nombre": "Bowl Personalizado",
-      "precio": 18.00,
-      "categoria": "A la carta",
-      "disponible": true,
-      "esMenuCompuesto": 0,
-      "esArmaPlato": 1,
-      "etiquetas": [],
-      "componentes": [],
+      "id": "a1b2c3d4-...", "nombre": "Arma tu plato", "categoria": "Arma tu plato", "precio": 35.00,
+      "esArmaPlato": true, "disponible": true, "etiquetas": [], "componentes": [],
       "opcionesArmaPlato": [
-        { "itemId": "opc-001-...", "nombre": "Quinoa",            "tipo": "BASE",     "precioExtra": 0.00,  "disponible": true },
-        { "itemId": "opc-002-...", "nombre": "Pollo a la plancha","tipo": "PROTEINA", "precioExtra": 5.00,  "disponible": true },
-        { "itemId": "opc-003-...", "nombre": "Palta",             "tipo": "TOPPING",  "precioExtra": 2.00,  "disponible": true }
+        { "tipo": "base", "itemId": "opc-001-...", "nombre": "Arroz blanco", "precioExtra": 0.00, "disponible": true },
+        { "tipo": "proteina", "itemId": "opc-002-...", "nombre": "Lomo de res", "precioExtra": 8.00, "disponible": true }
       ]
     }
   ]
 }
 ```
 
----
-
-#### PUT `/api/restaurantes/{id}` — Actualizar restaurante _(admin)_
-
-```bash
-curl -X PUT http://localhost:8080/api/restaurantes/c3d4e5f6-... \
-  -H "Authorization: Bearer <token-admin>" \
-  -H "Content-Type: application/json" \
-  -d '{ "nombre": "Comida al Paso — Miraflores", "telefono": "999888777" }'
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### PATCH `/api/restaurantes/{id}/toggle` — Activar / desactivar _(admin)_
-
-```bash
-curl -X PATCH http://localhost:8080/api/restaurantes/c3d4e5f6-.../toggle \
-  -H "Authorization: Bearer <token-admin>" \
-  -H "Content-Type: application/json" \
-  -d '{ "activo": false }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
+Categorías fijas por `codigo`: `menu` · `a_la_carta` · `entradas` · `postres` · `bebidas` · `arma_plato`.
 
 ---
 
 ### Mesas — `/api/mesas`
 
-#### POST `/api/mesas` — Crear mesa _(admin o restaurante)_
+| Método | Ruta | Auth |
+|---|---|---|
+| POST | `/api/mesas` | admin o restaurante |
+| GET | `/api/mesas?restauranteId=...&estado=disponible` | autenticado |
+| PUT | `/api/mesas/{id}` | admin o restaurante |
+| PATCH | `/api/mesas/{id}/estado` | admin o restaurante |
+| DELETE | `/api/mesas/{id}` | admin o restaurante |
 
 ```bash
 curl -X POST http://localhost:8080/api/mesas \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "restauranteId": "c3d4e5f6-...",
-    "numero": 5,
-    "capacidad": 4
-  }'
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "restauranteId": "c3d4e5f6-...", "numero": "M-06", "capacidad": 4 }'
 ```
 
-```json
-{ "id": "d4e5f6a7-..." }
-```
-
----
-
-#### GET `/api/mesas` — Listar mesas _(autenticado)_
-
-```bash
-curl "http://localhost:8080/api/mesas?restauranteId=c3d4e5f6-...&estado=LIBRE" \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "id": "d4e5f6a7-...", "numero": 5, "capacidad": 4, "estado": "LIBRE", "restauranteId": "c3d4e5f6-..." },
-  { "id": "e5f6a7b8-...", "numero": 6, "capacidad": 2, "estado": "LIBRE", "restauranteId": "c3d4e5f6-..." }
-]
-```
-
----
-
-#### PUT `/api/mesas/{id}` — Actualizar mesa _(admin o restaurante)_
-
-```bash
-curl -X PUT http://localhost:8080/api/mesas/d4e5f6a7-... \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "capacidad": 6 }'
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### PATCH `/api/mesas/{id}/estado` — Cambiar estado de mesa _(admin o restaurante)_
-
-```bash
-curl -X PATCH http://localhost:8080/api/mesas/d4e5f6a7-.../estado \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "estado": "OCUPADA" }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
-
----
-
-#### DELETE `/api/mesas/{id}` — Eliminar mesa _(admin o restaurante)_
-
-```bash
-curl -X DELETE http://localhost:8080/api/mesas/d4e5f6a7-... \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{ "ok": true }
-```
+`numero` es texto (`"M-06"`), no número. Estados de mesa: `disponible` · `ocupada` · `reservada`.
 
 ---
 
 ### Menú — `/api/menu`
 
-> **Ownership:** Las operaciones de escritura (crear, actualizar, toggle, eliminar ítems y componentes) validan que el usuario con rol `RESTAURANTE` solo pueda gestionar ítems de su propio restaurante. Intentar modificar ítems de otro restaurante devuelve `400 FORBIDDEN`.
+> **Ownership:** las escrituras validan que el usuario `restaurante` solo gestione ítems de su propio restaurante — de lo contrario `400 BUSINESS_RULE`.
 
-#### GET `/api/menu/categorias` — Listar categorías _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/menu/categorias \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "codigo": "ENTRADAS", "nombre": "Entradas" },
-  { "codigo": "FONDOS",   "nombre": "Fondos" },
-  { "codigo": "POSTRES",  "nombre": "Postres" },
-  { "codigo": "BEBIDAS",  "nombre": "Bebidas" }
-]
-```
-
----
-
-#### GET `/api/menu/items` — Listar ítems de menú _(autenticado)_
+| Método | Ruta | Auth |
+|---|---|---|
+| GET | `/api/menu/categorias` | público |
+| GET | `/api/menu/items?restauranteId=&categoria=&etiqueta=&soloDisponibles=` | público |
+| POST | `/api/menu/items` | admin o restaurante |
+| PUT / PATCH toggle / DELETE `/api/menu/items/{id}` | admin o restaurante |
+| GET `/api/menu/items/{menuId}/componentes` | público |
+| POST `/api/menu/items/{menuId}/componentes` | admin o restaurante |
+| DELETE `/api/menu/items/{menuId}/componentes/{itemId}` | admin o restaurante |
+| GET `/api/menu/items/{armaPlatoId}/arma-plato` | público |
+| POST `/api/menu/items/{armaPlatoId}/arma-plato` | admin o restaurante |
 
 ```bash
-curl "http://localhost:8080/api/menu/items?restauranteId=c3d4e5f6-...&categoria=FONDOS&soloDisponibles=true" \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  {
-    "id": "f6a7b8c9-...",
-    "nombre": "Lomo Saltado",
-    "descripcion": "Clásico peruano con papas fritas",
-    "precio": 28.00,
-    "categoria": "FONDOS",
-    "disponible": true,
-    "imagenUrl": "/images/lomo-saltado.jpg"
-  }
-]
-```
-
----
-
-#### POST `/api/menu/items` — Crear ítem _(admin o restaurante)_
-
-```bash
+# Crear ítem
 curl -X POST http://localhost:8080/api/menu/items \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{
     "restauranteId": "c3d4e5f6-...",
-    "nombre": "Ceviche Clásico",
-    "descripcion": "Pescado fresco, limón, ají y choclo",
-    "precio": 32.00,
-    "categoria": "ENTRADAS",
-    "imagenUrl": "/images/ceviche.jpg"
+    "categoriaCodigo": "entradas",
+    "nombre": "Ceviche entrada",
+    "descripcion": "Pescado fresco en limón",
+    "precio": 18.00,
+    "pesoGramos": 180,
+    "esMenuCompuesto": false,
+    "esArmaPlato": false
   }'
-```
 
-```json
-{ "id": "g7h8i9j0-..." }
-```
+# Agregar componente a un menú compuesto (rol = 'entrada' | 'fondo' | 'bebida', libre)
+curl -X POST http://localhost:8080/api/menu/items/{menuId}/componentes \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "itemId": "h8i9j0k1-...", "rol": "fondo", "obligatorio": true, "orden": 1 }'
 
----
-
-#### PUT `/api/menu/items/{id}` — Actualizar ítem _(admin o restaurante)_
-
-```bash
-curl -X PUT http://localhost:8080/api/menu/items/g7h8i9j0-... \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "precio": 34.00, "descripcion": "Pescado fresco del día" }'
-```
-
-```json
-{ "ok": true }
+# Agregar opción de arma-tu-plato (tipo ∈ base|proteina|topping|bebida)
+curl -X POST http://localhost:8080/api/menu/items/{armaPlatoId}/arma-plato \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "itemId": "opc-004-...", "tipo": "topping", "precioExtra": 3.00 }'
 ```
 
 ---
 
-#### PATCH `/api/menu/items/{id}/toggle` — Activar / desactivar ítem _(admin o restaurante)_
+### Etiquetas — `/api/items/{itemId}/etiquetas`
 
-```bash
-curl -X PATCH http://localhost:8080/api/menu/items/g7h8i9j0-.../toggle \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "disponible": false }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
-
----
-
-#### DELETE `/api/menu/items/{id}` — Eliminar ítem _(admin o restaurante)_
-
-```bash
-curl -X DELETE http://localhost:8080/api/menu/items/g7h8i9j0-... \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### GET `/api/menu/items/{menuId}/componentes` — Componentes de un combo _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/menu/items/f6a7b8c9-.../componentes \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "id": "comp-001-...", "itemId": "h8i9j0k1-...", "nombre": "Arroz con leche", "cantidad": 1 }
-]
-```
-
----
-
-#### POST `/api/menu/items/{menuId}/componentes` — Agregar componente _(admin o restaurante)_
-
-```bash
-curl -X POST http://localhost:8080/api/menu/items/f6a7b8c9-.../componentes \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "itemId": "h8i9j0k1-...",
-    "cantidad": 1
-  }'
-```
-
-```json
-{ "id": "comp-002-..." }
-```
-
----
-
-#### DELETE `/api/menu/items/{menuId}/componentes/{itemId}` — Quitar componente _(admin o restaurante)_
-
-```bash
-curl -X DELETE http://localhost:8080/api/menu/items/f6a7b8c9-.../componentes/h8i9j0k1-... \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### GET `/api/menu/items/{armaPlatoId}/arma-plato` — Opciones de arma tu plato _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/menu/items/bowl-base-001-.../arma-plato \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "id": "opc-001-...", "nombre": "Quinoa", "tipo": "BASE",     "precio": 0.00 },
-  { "id": "opc-002-...", "nombre": "Pollo a la plancha", "tipo": "PROTEINA", "precio": 5.00 },
-  { "id": "opc-003-...", "nombre": "Palta", "tipo": "TOPPING",  "precio": 2.00 }
-]
-```
-
----
-
-#### POST `/api/menu/items/{armaPlatoId}/arma-plato` — Agregar opción arma tu plato _(admin o restaurante)_
-
-```bash
-curl -X POST http://localhost:8080/api/menu/items/bowl-base-001-.../arma-plato \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "itemId": "opc-004-...",
-    "tipo": "TOPPING",
-    "precioAdicional": 1.50
-  }'
-```
-
-```json
-{ "id": "opc-005-..." }
-```
+| Método | Auth |
+|---|---|
+| POST — asignar (`{"codigo": "vegano"}`) | admin o restaurante |
+| GET — listar del ítem | autenticado |
+| DELETE `/{codigo}` — quitar | admin o restaurante |
 
 ---
 
 ### Pedidos — `/api/pedidos`
 
+Estados: `recibido` → `en_preparacion` → `listo` → `entregado`, o `cancelado` (solo desde `recibido`/`en_preparacion`).
+
 #### POST `/api/pedidos` — Crear pedido _(cliente)_
 
 ```bash
 curl -X POST http://localhost:8080/api/pedidos \
-  -H "Authorization: Bearer <token-cliente>" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token-cliente>" -H "Content-Type: application/json" \
   -d '{
     "restauranteId": "c3d4e5f6-...",
-    "modo": "SALON",
+    "modo": "salon",
     "mesaId": "d4e5f6a7-...",
     "numComensales": 2,
     "notas": "Sin picante por favor",
     "items": [
-      { "itemId": "f6a7b8c9-...", "cantidad": 1, "notas": "" },
-      { "itemId": "g7h8i9j0-...", "cantidad": 2, "notas": "Extra limón" }
+      { "itemMenuId": "f6a7b8c9-...", "cantidad": 1 },
+      { "itemMenuId": "g7h8i9j0-...", "cantidad": 2, "notasItem": "Extra limón" }
     ]
   }'
 ```
+
+`modo` ∈ `recojo` · `delivery` · `salon`. Salón exige `mesaId`; delivery exige `direccion`. El precio de cada línea lo fija el backend desde `items_menu.precio` — no confía en lo que mande el cliente. El total se calcula en el SP; para ítems de "arma tu plato" los extras solo viajan como texto en `notasItem` (el precio base del ítem es el que se cobra).
 
 ```json
 { "id": "k1l2m3n4-..." }
 ```
 
----
-
-#### GET `/api/pedidos/{id}` — Detalle de pedido _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/pedidos/k1l2m3n4-... \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{
-  "id": "k1l2m3n4-...",
-  "restauranteId": "c3d4e5f6-...",
-  "clienteId": "a1b2c3d4-...",
-  "modo": "SALON",
-  "estado": "PENDIENTE",
-  "total": 88.00,
-  "notas": "Sin picante por favor",
-  "creadoEn": "2025-06-11T14:30:00",
-  "items": [
-    { "itemId": "f6a7b8c9-...", "nombre": "Lomo Saltado", "cantidad": 1, "precioUnitario": 28.00, "subtotal": 28.00 },
-    { "itemId": "g7h8i9j0-...", "nombre": "Ceviche Clásico", "cantidad": 2, "precioUnitario": 32.00, "subtotal": 64.00, "notas": "Extra limón" }
-  ]
-}
-```
-
----
-
-#### GET `/api/pedidos/restaurante/{restauranteId}` — Pedidos del restaurante _(admin o restaurante)_
-
-```bash
-curl "http://localhost:8080/api/pedidos/restaurante/c3d4e5f6-...?estado=PENDIENTE&modo=SALON" \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "id": "k1l2m3n4-...", "estado": "PENDIENTE", "modo": "SALON", "total": 88.00, "creadoEn": "2025-06-11T14:30:00" }
-]
-```
-
----
-
-#### GET `/api/pedidos/cliente` — Mis pedidos _(cliente)_
-
-```bash
-curl http://localhost:8080/api/pedidos/cliente \
-  -H "Authorization: Bearer <token-cliente>"
-```
-
-```json
-[
-  { "id": "k1l2m3n4-...", "estado": "ENTREGADO", "modo": "TAKEAWAY", "total": 34.00, "creadoEn": "2025-06-10T12:00:00" }
-]
-```
-
----
-
-#### PATCH `/api/pedidos/{id}/estado` — Cambiar estado _(admin, restaurante o repartidor)_
-
-Flujo salón / recojo: `recibido → en_preparacion → listo → entregado`  
-Flujo delivery: `recibido → en_preparacion → listo → asignado → en_camino → entregado`
-
-Estados válidos: `recibido` · `en_preparacion` · `listo` · `entregado` · `asignado` · `en_camino`
+| Método | Ruta | Auth |
+|---|---|---|
+| GET `/api/pedidos/{id}` | autenticado |
+| GET `/api/pedidos/restaurante/{restauranteId}?estado=&modo=` | admin o restaurante |
+| GET `/api/pedidos/cliente` | cliente |
+| PATCH `/api/pedidos/{id}/estado` | admin, restaurante o repartidor |
+| PATCH `/api/pedidos/{id}/repartidor` | admin o restaurante |
+| POST `/api/pedidos/{id}/cancelar` | autenticado |
+| GET `/api/pedidos/{id}/historial` | autenticado |
 
 ```bash
 curl -X PATCH http://localhost:8080/api/pedidos/k1l2m3n4-.../estado \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{ "estado": "en_preparacion" }'
 ```
 
-`202 Accepted`
-```json
-{ "ok": true }
-```
+`estado` acepta: `recibido` · `en_preparacion` · `listo` · `entregado` · `asignado` · `en_camino` (los dos últimos, delivery). `cancelado` **no** se setea aquí — usa `POST /cancelar`.
 
----
-
-#### PATCH `/api/pedidos/{id}/repartidor` — Asignar repartidor _(admin o restaurante)_
-
-```bash
-curl -X PATCH http://localhost:8080/api/pedidos/k1l2m3n4-.../repartidor \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "repartidorId": "z9y8x7w6-..." }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
-
----
-
-#### POST `/api/pedidos/{id}/cancelar` — Cancelar pedido _(autenticado)_
-
-```bash
-curl -X POST http://localhost:8080/api/pedidos/k1l2m3n4-.../cancelar \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### GET `/api/pedidos/{id}/historial` — Historial de estados _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/pedidos/k1l2m3n4-.../historial \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "estado": "PENDIENTE",       "cambiadoEn": "2025-06-11T14:30:00", "usuarioId": "a1b2c3d4-..." },
-  { "estado": "EN_PREPARACION",  "cambiadoEn": "2025-06-11T14:32:00", "usuarioId": "b2c3d4e5-..." }
-]
-```
+**Al entregar** un pedido con pago en `efectivo` pendiente, el backend lo marca `completado` automáticamente (quien entrega, cobra). **Al cancelar**, cualquier pago `pendiente` pasa a `fallido` y la mesa (si era salón) vuelve a `disponible`.
 
 ---
 
@@ -897,112 +383,22 @@ curl http://localhost:8080/api/pedidos/k1l2m3n4-.../historial \
 
 ```bash
 curl -X POST http://localhost:8080/api/pagos \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pedidoId": "k1l2m3n4-...",
-    "metodo": "TARJETA",
-    "monto": 88.00
-  }'
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "pedidoId": "k1l2m3n4-...", "metodo": "tarjeta", "referenciaExterna": "1111" }'
 ```
 
-```json
-{ "id": "pago-001-..." }
-```
+`metodo` ∈ `tarjeta` · `transferencia` · `efectivo`. El monto lo toma el backend de `pedidos.total` — no se envía. **`tarjeta` se confirma automáticamente al registrarse** (simula una pasarela síncrona); `efectivo`/`transferencia` quedan `pendiente` hasta que el restaurante confirma el cobro físico.
+
+| Método | Ruta | Auth |
+|---|---|---|
+| PATCH `/api/pagos/{id}/confirmar` | admin o restaurante |
+| PATCH `/api/pagos/{id}/fallo` | admin o restaurante |
+| GET `/api/pagos/pedido/{pedidoId}` | autenticado |
+
+Un pedido solo puede tener **un** pago (`pedido_id UNIQUE`) — no hay reintentos de pago.
 
 ---
 
-#### PATCH `/api/pagos/{id}/confirmar` — Confirmar pago _(admin)_
+## Estado de tests
 
-```bash
-curl -X PATCH http://localhost:8080/api/pagos/pago-001-.../confirmar \
-  -H "Authorization: Bearer <token-admin>" \
-  -H "Content-Type: application/json" \
-  -d '{ "referenciaExterna": "TXN-987654" }'
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
-
----
-
-#### PATCH `/api/pagos/{id}/fallo` — Marcar pago fallido _(admin)_
-
-```bash
-curl -X PATCH http://localhost:8080/api/pagos/pago-001-.../fallo \
-  -H "Authorization: Bearer <token-admin>"
-```
-
-`202 Accepted`
-```json
-{ "ok": true }
-```
-
----
-
-#### GET `/api/pagos/pedido/{pedidoId}` — Pago de un pedido _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/pagos/pedido/k1l2m3n4-... \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{
-  "id": "pago-001-...",
-  "pedidoId": "k1l2m3n4-...",
-  "metodo": "TARJETA",
-  "monto": 88.00,
-  "estado": "CONFIRMADO",
-  "referenciaExterna": "TXN-987654",
-  "creadoEn": "2025-06-11T14:35:00"
-}
-```
-
----
-
-### Etiquetas — `/api/items/{itemId}/etiquetas`
-
-#### POST — Asignar etiqueta a ítem _(admin o restaurante)_
-
-```bash
-curl -X POST http://localhost:8080/api/items/g7h8i9j0-.../etiquetas \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "codigo": "VEGANO" }'
-```
-
-```json
-{ "ok": true }
-```
-
----
-
-#### GET — Etiquetas de un ítem _(autenticado)_
-
-```bash
-curl http://localhost:8080/api/items/g7h8i9j0-.../etiquetas \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-[
-  { "codigo": "VEGANO",    "nombre": "Vegano" },
-  { "codigo": "SIN_GLUTEN","nombre": "Sin Gluten" }
-]
-```
-
----
-
-#### DELETE `/api/items/{itemId}/etiquetas/{codigo}` — Quitar etiqueta _(admin o restaurante)_
-
-```bash
-curl -X DELETE http://localhost:8080/api/items/g7h8i9j0-.../etiquetas/VEGANO \
-  -H "Authorization: Bearer <token>"
-```
-
-```json
-{ "ok": true }
-```
+36 tests (JUnit 5 + Mockito + `@WebMvcTest`), cubren `authusuario` y `JwtTokenProvider`. Testcontainers para los demás dominios (pedido, pago, restaurante, menu, mesa, etiqueta) queda pendiente — hoy se verifican con smoke tests manuales contra la BD real.

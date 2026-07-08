@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AuthInterceptor from "@/components/AuthInterceptor";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,6 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body className="min-h-screen bg-[var(--color-surface)] text-[var(--color-on-surface)]">
         {children}
+        <AuthInterceptor />
       </body>
     </html>
   );

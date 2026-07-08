@@ -13,20 +13,16 @@ import type { CartItem } from '@/store/cartStore'
 // ─── Carga de datos (controller) ─────────────────────────────────────────────
 
 export async function cargarRestaurantes(): Promise<RestauranteDTO[] | null> {
-  const token = getToken()
-  if (!token) return null
   try {
-    return await listarRestaurantesApi(token)
+    return await listarRestaurantesApi(getToken())
   } catch {
     return null
   }
 }
 
 export async function cargarCarta(id: string): Promise<ElegirResponse | null> {
-  const token = getToken()
-  if (!token) return null
   try {
-    return await elegirRestauranteApi(token, id)
+    return await elegirRestauranteApi(id, getToken())
   } catch {
     return null
   }
@@ -65,9 +61,11 @@ export function itemACartItem(
 ): Omit<CartItem, 'quantity'> {
   return {
     id: `rest-${restauranteId}-item-${item.id}`,
+    itemMenuId: item.id,
+    restauranteId,
     name: item.nombre,
     price: item.precio,
-    image: getImagenItem(item.nombre, item.categoria, item.id),
+    image: item.imagenUrl ?? getImagenItem(item.nombre, item.categoria, item.id),
     category: item.categoria,
   }
 }
@@ -87,9 +85,12 @@ export function armaPlatoACartItem(
   const detalle = seleccion.map((o) => o.nombre).join(', ')
   return {
     id: `rest-${restauranteId}-item-${item.id}-${Date.now()}`,
+    itemMenuId: item.id,
+    restauranteId,
     name: detalle ? `${item.nombre} (${detalle})` : item.nombre,
     price: calcularPrecioArmaPlato(item, seleccion),
-    image: getImagenItem(item.nombre, item.categoria, item.id),
+    image: item.imagenUrl ?? getImagenItem(item.nombre, item.categoria, item.id),
     category: item.categoria,
+    notasItem: detalle || undefined,
   }
 }

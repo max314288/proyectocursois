@@ -51,12 +51,3 @@ export async function registerApi(data: {
 
   return res.json() as Promise<LoginResponse>
 }
-
-export async function fetchMe(token: string): Promise<UsuarioDTO> {
-  const res = await fetch(`${API}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-
-  if (!res.ok) throw new Error('UNAUTHORIZED')
-  return res.json() as Promise<UsuarioDTO>
-}

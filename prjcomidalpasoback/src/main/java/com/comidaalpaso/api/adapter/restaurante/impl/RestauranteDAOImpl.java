@@ -114,7 +114,7 @@ public class RestauranteDAOImpl implements RestauranteDAO {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("{call sp_listar_restaurantes(?, ?)}")
             .setParameter(1, (short) (soloActivos ? 1 : 0))
-            .setParameter(2, usuarioId.toString())
+            .setParameter(2, usuarioId != null ? usuarioId.toString() : null)
             .getResultList();
         return rows.stream().map(this::mapRow).toList();
     }

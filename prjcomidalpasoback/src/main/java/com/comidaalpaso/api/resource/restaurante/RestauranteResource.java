@@ -43,17 +43,22 @@ public class RestauranteResource {
     }
 
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<RestauranteDTO>> listar(
             @RequestParam(defaultValue = "false") boolean soloActivos,
             @AuthenticationPrincipal AuthenticatedUser principal) {
-        return ResponseEntity.ok(restauranteService.listar(soloActivos, principal.getId()));
+        UUID usuarioId = principal != null ? principal.getId() : null;
+        return ResponseEntity.ok(restauranteService.listar(soloActivos, usuarioId));
     }
 
     @GetMapping("/{id}/elegir")
-    @PreAuthorize("hasRole('CLIENTE')")
     public ResponseEntity<ElegirRestauranteDTO> elegir(@PathVariable UUID id) {
         return ResponseEntity.ok(restauranteService.elegir(id));
+    }
+
+    @GetMapping("/mio")
+    @PreAuthorize("hasRole('RESTAURANTE')")
+    public ResponseEntity<RestauranteDTO> mio(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(restauranteService.miRestaurante(principal.getId()));
     }
 
     @PutMapping("/{id}")

@@ -1,29 +1,22 @@
 /**
- * pedidoService.ts — CONTROLLER layer
+ * pedidoService.ts — CONTROLLER layer para el bowl builder ("Arma tu plato")
  *
- * SOLID:
- *  S — cada función tiene una única responsabilidad
- *  O — se pueden agregar nuevos pasos/validaciones sin modificar los existentes
- *  I — BowlSelection es una interfaz mínima y específica
- *  D — el componente depende de estas abstracciones, no de lógica inline
+ * Opera sobre las opciones reales del backend (OpcionArmaPlatoDTO), agrupadas
+ * por tipo ('base' | 'proteina' | 'topping' | 'bebida' — únicos valores que
+ * acepta arma_plato_componentes.tipo en la BD).
  */
 
-import { BOWL_BASE_PRICE } from '@/lib/data'
-import type { BuilderItem } from '@/lib/data'
+import { getImagenItem } from './imagenService'
+import type { ItemCartaDTO, OpcionArmaPlatoDTO } from './restauranteApiService'
 import type { CartItem } from '@/store/cartStore'
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
-
 export interface BowlSelection {
-  base: BuilderItem | null
-  proteina: BuilderItem | null
-  toppings: BuilderItem[]
-  bebida: BuilderItem | null
+  base: OpcionArmaPlatoDTO | null
+  proteina: OpcionArmaPlatoDTO | null
+  toppings: OpcionArmaPlatoDTO[]
+  bebida: OpcionArmaPlatoDTO | null
 }
 
-/**
- * Estado inicial del bowl — exportado para que el componente no repita el objeto
- */
 export const BOWL_SELECTION_INICIAL: BowlSelection = {
   base: null,
   proteina: null,
@@ -31,95 +24,115 @@ export const BOWL_SELECTION_INICIAL: BowlSelection = {
   bebida: null,
 }
 
-// ─── Cálculo de precio ────────────────────────────────────────────────────────
+export const ORDEN_TIPOS = ['base', 'proteina', 'topping', 'bebida'] as const
 
-/**
- * Calcula el precio total del bowl sumando todos los componentes seleccionados
- * S: responsabilidad única — solo calcula el precio
- */
-export function calcularPrecioBowl(sel: BowlSelection): number {
+export const LABEL_TIPO: Record<string, string> = {
+  base: 'Base',
+  proteina: 'Proteína',
+  topping: 'Toppings',
+  bebida: 'Bebida',
+}
+
+export function esTipoMultiple(tipo: string): boolean {
+  return tipo === 'topping'
+}
+
+export function agruparOpcionesPorTipo(
+  opciones: OpcionArmaPlatoDTO[]
+): Record<string, OpcionArmaPlatoDTO[]> {
+  return opciones.reduce<Record<string, OpcionArmaPlatoDTO[]>>((acc, o) => {
+    ;(acc[o.tipo] ??= []).push(o)
+    return acc
+  }, {})
+}
+
+export function calcularPrecioBowl(item: ItemCartaDTO, sel: BowlSelection): number {
   return (
-    BOWL_BASE_PRICE +
-    (sel.base?.price ?? 0) +
-    (sel.proteina?.price ?? 0) +
-    sel.toppings.reduce((s, t) => s + t.price, 0) +
-    (sel.bebida?.price ?? 0)
+    item.precio +
+    (sel.base?.precioExtra ?? 0) +
+    (sel.proteina?.precioExtra ?? 0) +
+    sel.toppings.reduce((s, t) => s + t.precioExtra, 0) +
+    (sel.bebida?.precioExtra ?? 0)
   )
 }
 
-// ─── Navegación entre pasos ───────────────────────────────────────────────────
+export function puedeAvanzarPaso(tipo: string, sel: BowlSelection): boolean {
+  if (tipo === 'base') return !!sel.base
+  if (tipo === 'proteina') return !!sel.proteina
+  if (tipo === 'topping') return true // opcional
+  if (tipo === 'bebida') return !!sel.bebida
+  return true
+}
 
-/**
- * Determina si se puede avanzar al siguiente paso del wizard
- * S: encapsula las reglas de validación por paso
- */
-export function puedeAvanzarPaso(paso: number, sel: BowlSelection): boolean {
-  if (paso === 0) return !!sel.base
-  if (paso === 1) return !!sel.proteina
-  if (paso === 2) return true // toppings son opcionales
-  if (paso === 3) return !!sel.bebida
+export function toggleOpcion(
+  sel: BowlSelection,
+  tipo: string,
+  opcion: OpcionArmaPlatoDTO
+): BowlSelection {
+  if (tipo === 'topping') {
+    const existe = sel.toppings.find((t) => t.itemId === opcion.itemId)
+    return {
+      ...sel,
+      toppings: existe
+        ? sel.toppings.filter((t) => t.itemId !== opcion.itemId)
+        : [...sel.toppings, opcion],
+    }
+  }
+  if (tipo === 'base') return { ...sel, base: opcion }
+  if (tipo === 'proteina') return { ...sel, proteina: opcion }
+  if (tipo === 'bebida') return { ...sel, bebida: opcion }
+  return sel
+}
+
+export function estaSeleccionado(sel: BowlSelection, tipo: string, itemId: string): boolean {
+  if (tipo === 'base') return sel.base?.itemId === itemId
+  if (tipo === 'proteina') return sel.proteina?.itemId === itemId
+  if (tipo === 'topping') return sel.toppings.some((t) => t.itemId === itemId)
+  if (tipo === 'bebida') return sel.bebida?.itemId === itemId
   return false
 }
 
-// ─── Selección de toppings ────────────────────────────────────────────────────
-
-/**
- * Alterna un topping: lo agrega si no existe, lo quita si ya existe
- * S: responsabilidad única — solo alterna la selección
- * No muta el array original (inmutabilidad)
- */
-export function toggleTopping(
-  toppings: BuilderItem[],
-  item: BuilderItem
-): BuilderItem[] {
-  const existe = toppings.find((t) => t.id === item.id)
-  return existe
-    ? toppings.filter((t) => t.id !== item.id)
-    : [...toppings, item]
+export function imagenOpcion(o: OpcionArmaPlatoDTO): string {
+  return getImagenItem(o.nombre, o.tipo, o.itemId)
 }
 
-// ─── Construcción del CartItem ────────────────────────────────────────────────
+export function construirNombreBowl(item: ItemCartaDTO, sel: BowlSelection): string {
+  if (!sel.base || !sel.proteina) return item.nombre
+  return `${item.nombre}: ${sel.base.nombre} + ${sel.proteina.nombre}`
+}
 
-/**
- * Construye el nombre descriptivo del bowl
- * S: responsabilidad única — solo genera el nombre
- */
-export function construirNombreBowl(sel: BowlSelection): string {
-  if (!sel.base || !sel.proteina) return 'Bowl personalizado'
-  return `Bowl: ${sel.base.name} + ${sel.proteina.name}`
+function construirNotasBowl(sel: BowlSelection): string {
+  const partes: string[] = []
+  if (sel.base) partes.push(`Base: ${sel.base.nombre}`)
+  if (sel.proteina) partes.push(`Proteína: ${sel.proteina.nombre}`)
+  if (sel.toppings.length) partes.push(`Toppings: ${sel.toppings.map((t) => t.nombre).join(', ')}`)
+  if (sel.bebida) partes.push(`Bebida: ${sel.bebida.nombre}`)
+  return partes.join(' · ')
 }
 
 /**
- * Convierte la selección del bowl en un CartItem listo para agregar al carrito
- * Retorna null si faltan componentes obligatorios
- * S: responsabilidad única — solo convierte la selección
+ * Convierte la selección en un CartItem. `tiposObligatorios` son los tipos
+ * presentes en la carta de este restaurante (excluyendo 'topping', que es
+ * siempre opcional) — si un tipo no tiene opciones, no se exige.
  */
 export function seleccionACartItem(
-  sel: BowlSelection
-): Omit<CartItem, 'quantity'> | null {
-  if (!sel.base || !sel.proteina || !sel.bebida) return null
-  return {
-    id: `bowl-${Date.now()}`,
-    name: construirNombreBowl(sel),
-    price: calcularPrecioBowl(sel),
-    image: sel.proteina.image,
-    category: 'bowl',
-  }
-}
-
-// ─── Estado de selección visual ───────────────────────────────────────────────
-
-/**
- * Determina si un ítem está seleccionado en el paso actual del wizard
- * S: encapsula la lógica de selección por paso
- */
-export function obtenerSeleccionActual(
-  paso: number,
+  item: ItemCartaDTO,
+  restauranteId: string,
   sel: BowlSelection,
-  itemId: string
-): boolean {
-  if (paso === 0) return sel.base?.id === itemId
-  if (paso === 1) return sel.proteina?.id === itemId
-  if (paso === 2) return !!sel.toppings.find((t) => t.id === itemId)
-  return sel.bebida?.id === itemId
+  tiposObligatorios: string[]
+): Omit<CartItem, 'quantity'> | null {
+  if (tiposObligatorios.includes('base') && !sel.base) return null
+  if (tiposObligatorios.includes('proteina') && !sel.proteina) return null
+  if (tiposObligatorios.includes('bebida') && !sel.bebida) return null
+
+  return {
+    id: `bowl-${item.id}-${Date.now()}`,
+    itemMenuId: item.id,
+    restauranteId,
+    name: construirNombreBowl(item, sel),
+    price: calcularPrecioBowl(item, sel),
+    image: item.imagenUrl ?? getImagenItem(item.nombre, item.categoria, item.id),
+    category: item.categoria,
+    notasItem: construirNotasBowl(sel),
+  }
 }

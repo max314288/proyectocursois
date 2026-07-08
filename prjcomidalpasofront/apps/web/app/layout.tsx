@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Newsreader, Work_Sans } from 'next/font/google'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
+import PedidoWatcher from '@/components/PedidoWatcher'
+import AuthInterceptor from '@/components/AuthInterceptor'
 import './globals.css'
 
 const newsreader = Newsreader({
@@ -34,6 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Nav />
         <main className="pt-16">{children}</main>
         <Footer />
+        <PedidoWatcher />
+        <AuthInterceptor />
       </body>
     </html>
   )
