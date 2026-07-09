@@ -7,6 +7,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -14,6 +15,9 @@ import java.util.List;
  *
  * <p>Origins permitidos se leen de {@code cors.allowed-origins} en {@code application.properties}:
  * {@code localhost:3000, localhost:3001, localhost:3002}.
+ *
+ * <p>Además se permite cualquier subdominio de {@code devtunnels.ms} (VS Code dev tunnels)
+ * para poder exponer las apps locales por túnel durante pruebas/demos.
  */
 @Configuration
 public class CorsConfig {
@@ -24,7 +28,9 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        List<String> patterns = new ArrayList<>(List.of(allowedOrigins.split(",")));
+        patterns.add("https://*.devtunnels.ms");
+        cfg.setAllowedOriginPatterns(patterns);
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         cfg.setExposedHeaders(List.of("Authorization"));
