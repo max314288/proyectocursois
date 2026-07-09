@@ -39,6 +39,7 @@ public class MenuServiceImpl implements MenuService {
     @Override
     public UUID crearItem(CreateItemMenuRequest req, UUID usuarioId, Rol rol) {
         verificarOwnership(req.getRestauranteId(), usuarioId, rol);
+        validarCategoriaVsFlags(req.getCategoriaCodigo(), req.isEsMenuCompuesto(), req.isEsArmaPlato());
         return menuDAO.crearItem(
             req.getRestauranteId(), req.getCategoriaCodigo(), req.getNombre(),
             req.getDescripcion(), req.getPrecio(), req.getImagenUrl(),
@@ -129,5 +130,14 @@ public class MenuServiceImpl implements MenuService {
         UUID restauranteId = menuDAO.findRestauranteIdByItemId(itemId)
             .orElseThrow(() -> new ResourceNotFoundException("Ítem de menú no encontrado"));
         verificarOwnership(restauranteId, usuarioId, rol);
+    }
+
+    private void validarCategoriaVsFlags(String categoriaCodigo, boolean esMenuCompuesto, boolean esArmaPlato) {
+        if (esMenuCompuesto && !"menu".equals(categoriaCodigo)) {
+            throw new ReglaDeNegocioException("Solo un ítem de categoría 'menu' puede marcarse como menú compuesto");
+        }
+        if (esArmaPlato && !"arma_plato".equals(categoriaCodigo)) {
+            throw new ReglaDeNegocioException("Solo un ítem de categoría 'arma_plato' puede marcarse como arma tu plato");
+        }
     }
 }

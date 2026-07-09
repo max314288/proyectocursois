@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Eye, EyeOff, AlertCircle, CheckCircle, User, KeyRound, Receipt, ChevronRight } from 'lucide-react'
-import { estaAutenticado, getUsuario } from '@/lib/services/authService'
+import { Eye, EyeOff, AlertCircle, CheckCircle, User, KeyRound, Receipt, ChevronRight, LogOut } from 'lucide-react'
+import { estaAutenticado, getUsuario, cerrarSesion } from '@/lib/services/authService'
 import {
   actualizarPerfil,
   cambiarPassword,
@@ -91,6 +91,11 @@ export default function PerfilPage() {
     } else {
       setPwdError(getMensajeErrorPassword())
     }
+  }
+
+  function handleLogout() {
+    cerrarSesion()
+    router.replace('/acceso')
   }
 
   if (!ready) return null
@@ -355,6 +360,16 @@ export default function PerfilPage() {
           </button>
         </form>
       </section>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="flex items-center gap-2 mt-8 mx-auto text-sm font-semibold hover:opacity-80 transition-opacity"
+        style={{ color: '#dc2626' }}
+      >
+        <LogOut size={16} />
+        Cerrar sesión
+      </button>
     </div>
   )
 }

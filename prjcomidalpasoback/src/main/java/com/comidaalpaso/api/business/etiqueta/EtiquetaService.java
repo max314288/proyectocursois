@@ -10,4 +10,5 @@ public interface EtiquetaService {
     void asignar(UUID itemId, AsignarEtiquetaRequest req);
     void quitar(UUID itemId, String etiquetaCodigo);
     List<EtiquetaDTO> etiquetasDeItem(UUID itemId);
+    List<EtiquetaDTO> listarTodas();
 }

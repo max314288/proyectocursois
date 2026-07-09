@@ -586,8 +586,8 @@ CREATE OR ALTER PROCEDURE sp_listar_etiquetas
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT id, codigo, nombre, color
-    FROM etiquetas 
+    SELECT codigo, nombre, color
+    FROM etiquetas
     WHERE activo = 1
 END;
 GO

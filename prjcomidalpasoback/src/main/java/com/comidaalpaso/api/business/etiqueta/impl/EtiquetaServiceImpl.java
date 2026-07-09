@@ -34,4 +34,11 @@ public class EtiquetaServiceImpl implements EtiquetaService {
             .map(EtiquetaDTO::from)
             .toList();
     }
+
+    @Override
+    public List<EtiquetaDTO> listarTodas() {
+        return etiquetaDAO.listarTodas().stream()
+            .map(EtiquetaDTO::from)
+            .toList();
+    }
 }

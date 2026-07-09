@@ -14,6 +14,7 @@ import type {
   PedidoDetalleDTO,
   HistorialEstadoDTO,
   PagoDTO,
+  EtiquetaDTO,
 } from './types'
 
 // ─── Restaurantes ─────────────────────────────────────────────────────────────
@@ -75,8 +76,12 @@ export async function agregarOpcionArmaPlato(armaPlatoId: string, itemId: string
 
 // ─── Etiquetas ────────────────────────────────────────────────────────────────
 
+export async function listarEtiquetas(): Promise<EtiquetaDTO[]> {
+  return apiFetch('/etiquetas', { token: getToken() })
+}
+
 export async function asignarEtiqueta(itemId: string, codigo: string): Promise<void> {
-  return apiFetch(`/items/${itemId}/etiquetas`, { method: 'POST', body: { codigo }, token: getToken() })
+  return apiFetch(`/items/${itemId}/etiquetas`, { method: 'POST', body: { etiquetaCodigo: codigo }, token: getToken() })
 }
 
 export async function quitarEtiqueta(itemId: string, codigo: string): Promise<void> {

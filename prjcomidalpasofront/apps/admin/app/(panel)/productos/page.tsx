@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Tag, X, RefreshCw } from 'lucide-react'
 import { useRestauranteStore } from '@/store/restauranteStore'
-import { cargarCatalogo, crearItem, actualizarItem, toggleItem, eliminarItem, asignarEtiqueta, quitarEtiqueta } from '@/lib/services/adminApiService'
-import type { ItemCartaDTO, ElegirResponse } from '@/lib/services/types'
+import { cargarCatalogo, crearItem, actualizarItem, toggleItem, eliminarItem, asignarEtiqueta, quitarEtiqueta, listarEtiquetas } from '@/lib/services/adminApiService'
+import type { ItemCartaDTO, ElegirResponse, EtiquetaDTO } from '@/lib/services/types'
 
 const CATEGORIAS = [
   { codigo: 'menu', label: 'Menú del día' },
@@ -47,6 +47,10 @@ export default function ProductosPage() {
   const [form, setForm] = useState<FormState>(FORM_INICIAL)
   const [guardando, setGuardando] = useState(false)
   const [etiquetaInput, setEtiquetaInput] = useState('')
+  const [etiquetaFocoItemId, setEtiquetaFocoItemId] = useState<string | null>(null)
+  const [catalogoEtiquetas, setCatalogoEtiquetas] = useState<EtiquetaDTO[]>([])
+  const [eliminando, setEliminando] = useState<ItemCartaDTO | null>(null)
+  const [borrando, setBorrando] = useState(false)
 
   async function cargar() {
     if (!restaurante) return
@@ -65,6 +69,16 @@ export default function ProductosPage() {
     if (restaurante) cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurante])
+
+  useEffect(() => {
+    listarEtiquetas().then(setCatalogoEtiquetas).catch(() => {})
+  }, [])
+
+  function opcionesEtiqueta(item: ItemCartaDTO): EtiquetaDTO[] {
+    const asignadas = new Set(item.etiquetas.map((e) => e.codigo))
+    const q = etiquetaInput.trim().toLowerCase()
+    return catalogoEtiquetas.filter((e) => !asignadas.has(e.codigo) && e.nombre.toLowerCase().includes(q))
+  }
 
   function abrirCrear() {
     setEditando(null)
@@ -118,16 +132,23 @@ export default function ProductosPage() {
     cargar()
   }
 
-  async function handleEliminar(item: ItemCartaDTO) {
-    if (!confirm(`¿Eliminar "${item.nombre}"?`)) return
-    await eliminarItem(item.id)
-    cargar()
+  async function confirmarEliminar() {
+    if (!eliminando) return
+    setBorrando(true)
+    try {
+      await eliminarItem(eliminando.id)
+      setEliminando(null)
+      await cargar()
+    } finally {
+      setBorrando(false)
+    }
   }
 
-  async function handleAgregarEtiqueta(item: ItemCartaDTO) {
-    if (!etiquetaInput.trim()) return
-    await asignarEtiqueta(item.id, etiquetaInput.trim())
+  async function handleAgregarEtiqueta(item: ItemCartaDTO, codigo: string) {
+    if (!codigo) return
+    await asignarEtiqueta(item.id, codigo)
     setEtiquetaInput('')
+    setEtiquetaFocoItemId(null)
     cargar()
   }
 
@@ -198,14 +219,40 @@ export default function ProductosPage() {
                           {e.nombre} ×
                         </span>
                       ))}
-                      <input
-                        placeholder="+ etiqueta"
-                        value={etiquetaInput}
-                        onFocus={() => setEtiquetaInput('')}
-                        onChange={(e) => setEtiquetaInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAgregarEtiqueta(item)}
-                        className="w-20 text-[11px] px-1.5 py-0.5 rounded bg-transparent border border-dashed border-[var(--color-border)]"
-                      />
+                      <div className="relative">
+                        <input
+                          placeholder="+ etiqueta"
+                          value={etiquetaFocoItemId === item.id ? etiquetaInput : ''}
+                          onFocus={() => {
+                            setEtiquetaFocoItemId(item.id)
+                            setEtiquetaInput('')
+                          }}
+                          onChange={(e) => setEtiquetaInput(e.target.value)}
+                          onBlur={() => setTimeout(() => setEtiquetaFocoItemId(null), 150)}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return
+                            const primera = opcionesEtiqueta(item)[0]
+                            if (primera) handleAgregarEtiqueta(item, primera.codigo)
+                          }}
+                          className="w-20 text-[11px] px-1.5 py-0.5 rounded bg-transparent border border-dashed border-[var(--color-border)]"
+                        />
+                        {etiquetaFocoItemId === item.id && opcionesEtiqueta(item).length > 0 && (
+                          <div className="absolute z-10 top-full left-0 mt-1 w-40 max-h-48 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-white shadow-lg">
+                            {opcionesEtiqueta(item).map((opt) => (
+                              <button
+                                key={opt.codigo}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleAgregarEtiqueta(item, opt.codigo)}
+                                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] hover:bg-[var(--color-border)]"
+                              >
+                                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: opt.color ?? '#ccc' }} />
+                                {opt.nombre}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-5 py-3">
@@ -220,7 +267,7 @@ export default function ProductosPage() {
                     <button onClick={() => abrirEditar(item)} className="p-1.5 mr-1 btn-icon-interactive" data-tooltip="Editar" aria-label="Editar producto">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => handleEliminar(item)} className="p-1.5 text-red-600 btn-icon-interactive hover:bg-red-500/10" data-tooltip="Eliminar" aria-label="Eliminar producto">
+                    <button onClick={() => setEliminando(item)} className="p-1.5 text-red-600 btn-icon-interactive hover:bg-red-500/10" data-tooltip="Eliminar" aria-label="Eliminar producto">
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -254,7 +301,7 @@ export default function ProductosPage() {
                 <label className="block text-xs font-medium mb-1">Categoría</label>
                 <select
                   value={form.categoriaCodigo}
-                  onChange={(e) => setForm({ ...form, categoriaCodigo: e.target.value })}
+                  onChange={(e) => setForm({ ...form, categoriaCodigo: e.target.value, esMenuCompuesto: false, esArmaPlato: false })}
                   className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm"
                 >
                   {CATEGORIAS.map((c) => (
@@ -315,16 +362,20 @@ export default function ProductosPage() {
                 />
               </div>
 
-              {!editando && (
+              {!editando && (form.categoriaCodigo === 'menu' || form.categoriaCodigo === 'arma_plato') && (
                 <div className="flex gap-4 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.esMenuCompuesto} onChange={(e) => setForm({ ...form, esMenuCompuesto: e.target.checked })} />
-                    Menú compuesto
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.esArmaPlato} onChange={(e) => setForm({ ...form, esArmaPlato: e.target.checked })} />
-                    Arma tu plato
-                  </label>
+                  {form.categoriaCodigo === 'menu' && (
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.esMenuCompuesto} onChange={(e) => setForm({ ...form, esMenuCompuesto: e.target.checked })} />
+                      Menú compuesto
+                    </label>
+                  )}
+                  {form.categoriaCodigo === 'arma_plato' && (
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.esArmaPlato} onChange={(e) => setForm({ ...form, esArmaPlato: e.target.checked })} />
+                      Arma tu plato
+                    </label>
+                  )}
                 </div>
               )}
 
@@ -340,6 +391,34 @@ export default function ProductosPage() {
                 className="mt-2 w-full py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold btn-interactive disabled:opacity-50"
               >
                 {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear producto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal confirmar eliminación ── */}
+      {eliminando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-overlay-in" onClick={() => setEliminando(null)}>
+          <div className="w-full max-w-sm rounded-2xl p-6 bg-white animate-panel-in" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2">Eliminar producto</h2>
+            <p className="text-sm text-[var(--color-muted)] mb-5">
+              ¿Eliminar &quot;{eliminando.nombre}&quot;? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setEliminando(null)}
+                disabled={borrando}
+                className="flex-1 py-2.5 rounded-xl border border-[var(--color-border)] text-sm font-semibold btn-interactive disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarEliminar}
+                disabled={borrando}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold btn-interactive disabled:opacity-50"
+              >
+                {borrando ? 'Eliminando…' : 'Eliminar'}
               </button>
             </div>
           </div>
