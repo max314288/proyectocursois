@@ -33,6 +33,10 @@ export async function cancelarPedido(id: string): Promise<void> {
   return apiFetch(`/pedidos/${id}/cancelar`, { method: 'POST', token: getToken() })
 }
 
+export async function enviarComprobantePorCorreo(id: string, email: string): Promise<void> {
+  return apiFetch(`/pedidos/${id}/enviar-comprobante`, { method: 'POST', body: { email }, token: getToken() })
+}
+
 export async function listarMesas(restauranteId: string): Promise<MesaDTO[]> {
   return apiFetch(`/mesas?restauranteId=${restauranteId}&estado=disponible`, { token: getToken() })
 }

@@ -1,4 +1,4 @@
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080/api'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://packing-copied-sms-acting.trycloudflare.com/api' //'http://localhost:8080/api'
 
 export interface UsuarioDTO {
   id: string

@@ -29,7 +29,7 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         List<String> patterns = new ArrayList<>(List.of(allowedOrigins.split(",")));
-        patterns.add("https://*.devtunnels.ms");
+        patterns.add("https://*.trycloudflare.com");
         cfg.setAllowedOriginPatterns(patterns);
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
@@ -40,5 +40,5 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
         src.registerCorsConfiguration("/**", cfg);
         return src;
-    }
+    }    
 }

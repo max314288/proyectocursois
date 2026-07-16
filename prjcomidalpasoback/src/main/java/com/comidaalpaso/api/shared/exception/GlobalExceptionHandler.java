@@ -88,6 +88,13 @@ public class GlobalExceptionHandler {
         return badRequest("BUSINESS_RULE", ex.getMessage(), req);
     }
 
+    @ExceptionHandler(EmailEnvioException.class)
+    public ResponseEntity<ErrorResponse> handleEmailEnvio(
+            EmailEnvioException ex, HttpServletRequest req) {
+        log.warn("Fallo al enviar comprobante por correo", ex);
+        return badRequest("EMAIL_SEND_FAILED", "No se pudo enviar el correo. Intenta de nuevo más tarde.", req);
+    }
+
     // ─── 409 ───────────────────────────────────────────────────────────────────
 
     @ExceptionHandler(ConflictoRecursoException.class)

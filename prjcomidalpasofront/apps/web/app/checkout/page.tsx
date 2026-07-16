@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useCart } from '@/store/cartStore'
 import { useOrderStore, type ConsumptionMode, type PaymentMethod } from '@/store/orderStore'
 import { estaAutenticado } from '@/lib/services/authService'
-import { crearPedido, registrarPago, obtenerPedido, listarMesas } from '@/lib/services/pedidoApiService'
+import { crearPedido, registrarPago, obtenerPedido, listarMesas, enviarComprobantePorCorreo } from '@/lib/services/pedidoApiService'
 import { ApiError } from '@/lib/services/apiClient'
 import { formatearNumeroTarjeta, formatearExpiry, tarjetaCompleta } from '@/lib/services/checkoutService'
 import type { MesaDTO } from '@/lib/services/types'
@@ -24,6 +24,8 @@ import {
   ArrowLeft,
   Printer,
   AlertTriangle,
+  Mail,
+  Send,
 } from 'lucide-react'
 
 type Step = 'mode' | 'payment' | 'card' | 'done'
@@ -44,6 +46,13 @@ export default function CheckoutPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [totalDifiere, setTotalDifiere] = useState(false)
+
+  // Enviar comprobante por correo
+  const [mostrarFormCorreo, setMostrarFormCorreo] = useState(false)
+  const [emailComprobante, setEmailComprobante] = useState('')
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false)
+  const [correoEnviado, setCorreoEnviado] = useState(false)
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null)
 
   // Salón: mesa
   const [mesas, setMesas] = useState<MesaDTO[]>([])
@@ -147,6 +156,21 @@ export default function CheckoutPage() {
     setProcessing(true)
     await new Promise((r) => setTimeout(r, 1800)) // simulación de pasarela
     await finalizarPedido('tarjeta', cardNum.replace(/\s/g, '').slice(-4))
+  }
+
+  async function handleEnviarComprobante() {
+    if (!order) return
+    setEnviandoCorreo(true)
+    setErrorCorreo(null)
+    try {
+      await enviarComprobantePorCorreo(order.id, emailComprobante)
+      setCorreoEnviado(true)
+      setMostrarFormCorreo(false)
+    } catch (err) {
+      setErrorCorreo(err instanceof ApiError ? err.message : 'No se pudo enviar el correo. Intenta de nuevo.')
+    } finally {
+      setEnviandoCorreo(false)
+    }
   }
 
   const cartTotal = total()
@@ -625,6 +649,13 @@ export default function CheckoutPage() {
                       <Printer size={15} /> Imprimir / Guardar
                     </button>
                   )}
+                  <button
+                    onClick={() => setMostrarFormCorreo((v) => !v)}
+                    className="px-7 py-3 rounded-full text-sm font-semibold border-2 hover:bg-[var(--color-surface-container)] transition-colors inline-flex items-center gap-2 justify-center"
+                    style={{ borderColor: 'var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
+                  >
+                    <Mail size={15} /> Enviar por correo
+                  </button>
                   <Link href="/perfil/pedidos" className="px-7 py-3 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }}>
                     Ver mis pedidos
                   </Link>
@@ -636,6 +667,50 @@ export default function CheckoutPage() {
                     Ver más menús
                   </Link>
                 </div>
+
+                {mostrarFormCorreo && (
+                  <div className="mt-4 mx-auto max-w-sm print:hidden">
+                    <div className="rounded-xl p-4 text-left" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-on-surface)' }}>
+                        Correo de destino
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={emailComprobante}
+                          onChange={(e) => setEmailComprobante(e.target.value)}
+                          placeholder="tu@correo.com"
+                          required
+                          disabled={enviandoCorreo}
+                          className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none"
+                          style={{ backgroundColor: 'var(--color-surface)', border: '1.5px solid var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
+                        />
+                        <button
+                          onClick={handleEnviarComprobante}
+                          disabled={enviandoCorreo || !emailComprobante.includes('@')}
+                          className="px-5 py-2.5 rounded-full text-sm font-semibold inline-flex items-center gap-2 shrink-0"
+                          style={
+                            enviandoCorreo || !emailComprobante.includes('@')
+                              ? { backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', cursor: 'not-allowed' }
+                              : { backgroundColor: 'var(--color-primary)', color: 'var(--color-on-primary)' }
+                          }
+                        >
+                          {enviandoCorreo ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                          Enviar
+                        </button>
+                      </div>
+                      {errorCorreo && (
+                        <p className="text-xs mt-2" style={{ color: 'var(--color-error)' }}>{errorCorreo}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {correoEnviado && (
+                  <p className="text-xs mt-3 flex items-center justify-center gap-1.5 print:hidden" style={{ color: 'var(--color-secondary)' }}>
+                    <Check size={12} /> Comprobante enviado a {emailComprobante}
+                  </p>
+                )}
               </div>
             )}
           </div>

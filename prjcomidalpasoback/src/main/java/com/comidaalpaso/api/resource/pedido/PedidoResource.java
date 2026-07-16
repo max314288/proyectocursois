@@ -1,9 +1,11 @@
 package com.comidaalpaso.api.resource.pedido;
 
+import com.comidaalpaso.api.business.email.EmailService;
 import com.comidaalpaso.api.business.pedido.PedidoService;
 import com.comidaalpaso.api.resource.pedido.model.AsignarRepartidorRequest;
 import com.comidaalpaso.api.resource.pedido.model.CambiarEstadoPedidoRequest;
 import com.comidaalpaso.api.resource.pedido.model.CreatePedidoRequest;
+import com.comidaalpaso.api.resource.pedido.model.EnviarComprobanteRequest;
 import com.comidaalpaso.api.resource.pedido.model.HistorialEstadoDTO;
 import com.comidaalpaso.api.resource.pedido.model.PedidoDetalleDTO;
 import com.comidaalpaso.api.resource.pedido.model.PedidoResumenDTO;
@@ -31,9 +33,11 @@ import java.util.UUID;
 public class PedidoResource {
 
     private final PedidoService pedidoService;
+    private final EmailService emailService;
 
-    public PedidoResource(PedidoService pedidoService) {
+    public PedidoResource(PedidoService pedidoService, EmailService emailService) {
         this.pedidoService = pedidoService;
+        this.emailService = emailService;
     }
 
     @PostMapping
@@ -98,5 +102,14 @@ public class PedidoResource {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<HistorialEstadoDTO>> historial(@PathVariable UUID id) {
         return ResponseEntity.ok(pedidoService.historial(id));
+    }
+
+    @PostMapping("/{id}/enviar-comprobante")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Boolean>> enviarComprobante(
+            @PathVariable UUID id,
+            @Valid @RequestBody EnviarComprobanteRequest req) {
+        emailService.enviarComprobante(id, req.getEmail());
+        return ResponseEntity.accepted().body(Map.of("ok", true));
     }
 }
